@@ -31,7 +31,6 @@ export default function GoalTracker() {
   const [error, setError] = useState<string | null>(null)
   const [sessionVerified, setSessionVerified] = useState(false)
   const [customGoalName, setCustomGoalName] = useState('');
-  const [customGoalDescription, setCustomGoalDescription] = useState('');
   const [customGoalUrl, setCustomGoalUrl] = useState('');
   const [submittingCustomGoal, setSubmittingCustomGoal] = useState(false);
 
@@ -248,13 +247,11 @@ export default function GoalTracker() {
                         reward_id: null,
                         status: 'pending',
                         goal_url: customGoalUrl || null,
-                        custom_name: customGoalName,
-                        custom_description: customGoalDescription
+                        custom_name: customGoalName
                       });
                     if (error) throw error;
                     toast.success('Goal submitted for approval!');
                     setCustomGoalName('');
-                    setCustomGoalDescription('');
                     setCustomGoalUrl('');
                     // Refetch goal state
                     await fetchCurrentGoal();
@@ -274,21 +271,14 @@ export default function GoalTracker() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
                   required
                 />
-                <textarea
-                  placeholder="Description (e.g., I want to save up for a Nintendo Switch)"
-                  value={customGoalDescription}
-                  onChange={e => setCustomGoalDescription(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
-                  rows={3}
-                  required
-                />
                 <input
                   type="url"
-                  placeholder="Amazon or product link (optional)"
+                  placeholder="Amazon or product link"
                   value={customGoalUrl}
                   onChange={e => setCustomGoalUrl(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
                   pattern="https?://.*"
+                  required
                 />
                 <button
                   type="submit"
