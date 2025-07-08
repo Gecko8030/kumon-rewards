@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userType, setUserType] = useState<'student' | 'admin' | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Check user type (admin first, then student)
   const checkUserType = async (userId: string) => {
@@ -77,6 +78,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Handle session change and role restoration
   const handleSessionChange = async (session: Session | null) => {
+    // Skip session restoration if we're in the middle of a refresh signout
+    if (isRefreshing) {
+      console.log('⏭️ Skipping session restoration during refresh signout')
+      return
+    }
+    
     console.log('🔄 Session change detected:', session ? 'User logged in' : 'User logged out')
     const currentUser = session?.user ?? null
     console.log('👤 Current user:', currentUser?.id || 'None')
@@ -100,9 +107,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Make refresh behave like signout - clear session and sign out from Supabase
       console.log('🔄 Page refreshed - signing out user')
       console.log('🚨 emergencySignOut()')
+      setIsRefreshing(true)
       setUser(null)
       setUserType(null)
       await supabase.auth.signOut()
+      setIsRefreshing(false)
       setLoading(false)
     }
     restoreSession()
