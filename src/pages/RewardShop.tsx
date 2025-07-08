@@ -25,7 +25,6 @@ export default function RewardShop() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sessionVerified, setSessionVerified] = useState(false)
-  const [goalUrl, setGoalUrl] = useState('');
 
   const categories = ['all', 'toys', 'books', 'electronics', 'gift-cards', 'experiences']
   const priceRanges = [
@@ -152,8 +151,7 @@ export default function RewardShop() {
         .insert({
           student_id: user.id,
           reward_id: rewardId,
-          status: 'pending',
-          goal_url: goalUrl || null
+          status: 'pending'
         })
 
       if (error) {
@@ -161,7 +159,6 @@ export default function RewardShop() {
         throw error
       }
       
-      setGoalUrl('');
       console.log('Goal set successfully')
       toast.success('Goal set! Waiting for instructor approval.')
     } catch (error) {
@@ -305,16 +302,6 @@ export default function RewardShop() {
 
                   {user && userType === 'student' && (
                     <>
-                      <div className="mb-2">
-                        <input
-                          type="url"
-                          placeholder="Optional: Paste Amazon or product link as your goal"
-                          value={goalUrl}
-                          onChange={e => setGoalUrl(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
-                          pattern="https?://.*"
-                        />
-                      </div>
                       <button
                         onClick={() => setAsGoal(reward.id)}
                         className="w-full btn-primary flex items-center justify-center space-x-2"

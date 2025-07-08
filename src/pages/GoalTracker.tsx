@@ -16,7 +16,6 @@ interface Goal {
     cost: number
     image_url: string | null
   }
-  goal_url?: string | null
 }
 
 interface Student {
@@ -94,7 +93,6 @@ export default function GoalTracker() {
             id,
             status,
             created_at,
-            goal_url,
             rewards (
               id,
               name,
@@ -122,8 +120,7 @@ export default function GoalTracker() {
           id: data.id,
           status: data.status,
           created_at: data.created_at,
-          reward: data.rewards as any,
-          goal_url: data.goal_url || null
+          reward: data.rewards as any
         })
       } else {
         console.log('No current goal found')
@@ -313,19 +310,6 @@ export default function GoalTracker() {
             </div>
           </div>
         </div>
-
-        {currentGoal.goal_url && (
-          <div className="mt-4">
-            <a
-              href={currentGoal.goal_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-kumon-blue underline break-all"
-            >
-              View Product Link
-            </a>
-          </div>
-        )}
 
         {currentGoal.status === 'approved' && student && (
           <div className="bg-gradient-to-br from-kumon-blue to-kumon-purple rounded-2xl card-shadow p-8 text-white">
