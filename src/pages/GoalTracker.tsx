@@ -69,12 +69,32 @@ export default function GoalTracker() {
         setSessionVerified(true)
         
         // Fetch data only after session and role are verified
-        await fetchCurrentGoal()
-        await fetchStudentData()
+        try {
+          await Promise.all([
+            fetchCurrentGoal(),
+            fetchStudentData()
+          ])
+        } catch (error) {
+          console.error('Error fetching data:', error)
+          // Individual fetch functions handle their own errors
+        } finally {
+          setLoading(false)
+        }
         
       } catch (error) {
         console.error('Session verification error:', error)
-        setError('Failed to verify session. Please refresh the page.')
+        // Don't set error for network issues during session verification
+        if (!isNetworkError(error)) {
+          setError('Failed to verify session. Please refresh the page.')
+        } else {
+          console.warn('Network error during session verification, retrying...')
+          // Retry after a short delay
+          setTimeout(() => {
+            if (!sessionVerified) {
+              verifySessionAndRole()
+            }
+          }, 2000)
+        }
         setLoading(false)
       }
     }
@@ -85,7 +105,6 @@ export default function GoalTracker() {
   const fetchCurrentGoal = async () => {
     if (!user?.id) {
       console.log('No user ID available for fetching goals')
-      setLoading(false)
       return
     }
 
@@ -135,8 +154,6 @@ export default function GoalTracker() {
     } catch (error) {
       console.error('Error fetching goal:', error)
       // Don't set error state for goals as they're optional
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -166,13 +183,15 @@ export default function GoalTracker() {
       setStudent(data)
     } catch (error) {
       console.error('Failed to load student data:', error)
-      const errorMessage = isNetworkError(error) 
-        ? 'Network error - please check your connection' 
-        : 'Failed to load student data'
-      setError(errorMessage)
-      toast.error(errorMessage)
-    } finally {
-      setLoading(false)
+      // Only set error for non-network issues or if we have no student data at all
+      if (!isNetworkError(error)) {
+        const errorMessage = 'Failed to load student data'
+        setError(errorMessage)
+        toast.error(errorMessage)
+      } else {
+        // For network errors, just log but don't show error UI
+        console.warn('Network error loading student data, continuing without student data')
+      }
     }
   }
 
@@ -182,12 +201,28 @@ export default function GoalTracker() {
       if (loading && sessionVerified) {
         console.warn('Goal tracker loading timeout reached')
         setLoading(false)
-        // Do not set error here; let the UI show the custom goal form if no goal is found
+        setError(null) // Clear any existing errors
+        // Let the UI show the custom goal form if no goal is found
       }
     }, 15000) // 15 second timeout
 
     return () => clearTimeout(timeout)
   }, [loading, sessionVerified])
+
+  // Clear errors when data is successfully loaded
+  useEffect(() => {
+    if (!loading && sessionVerified && !error) {
+      // If we're not loading, session is verified, and no error, clear any previous errors
+      setError(null)
+    }
+  }, [loading, sessionVerified, error])
+
+  // Clear errors when component mounts or when session verification succeeds
+  useEffect(() => {
+    if (sessionVerified) {
+      setError(null)
+    }
+  }, [sessionVerified])
 
   // Show loading while auth is loading or session is being verified
   if (authLoading || !sessionVerified) {
@@ -238,6 +273,10 @@ export default function GoalTracker() {
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
+                  if (!user?.id) {
+                    toast.error('User not authenticated');
+                    return;
+                  }
                   setSubmittingCustomGoal(true);
                   try {
                     const { error } = await supabase
