@@ -99,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       // Make refresh behave like signout - clear session and sign out from Supabase
       console.log('🔄 Page refreshed - signing out user')
+      console.log('🚨 emergencySignOut()')
       setUser(null)
       setUserType(null)
       await supabase.auth.signOut()
