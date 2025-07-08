@@ -81,6 +81,7 @@ export default function GoalTracker() {
   const fetchCurrentGoal = async () => {
     if (!user?.id) {
       console.log('No user ID available for fetching goals')
+      setLoading(false)
       return
     }
 
@@ -128,6 +129,8 @@ export default function GoalTracker() {
     } catch (error) {
       console.error('Error fetching goal:', error)
       // Don't set error state for goals as they're optional
+    } finally {
+      setLoading(false)
     }
   }
 
