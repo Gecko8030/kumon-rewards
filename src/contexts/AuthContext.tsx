@@ -97,10 +97,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true
     const restoreSession = async () => {
       setLoading(true)
-      // Don't restore session on page load - force users to log in again
-      console.log('🔄 Page refreshed - clearing session')
+      // Make refresh behave like signout - clear session and sign out from Supabase
+      console.log('🔄 Page refreshed - signing out user')
       setUser(null)
       setUserType(null)
+      await supabase.auth.signOut()
       setLoading(false)
     }
     restoreSession()
