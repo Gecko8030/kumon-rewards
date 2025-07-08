@@ -28,28 +28,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkUserType = async (userId: string) => {
     try {
       // Check admin table first
-      const { data: admin } = await supabase
+      const { data: admin, error: adminError } = await supabase
         .from('admin')
         .select('id')
         .eq('id', userId)
         .maybeSingle()
+
+      if (adminError) {
+        console.error('Admin check error:', adminError)
+        // Don't clear userType on network errors, keep previous value
+        return
+      }
+
       if (admin) {
         setUserType('admin')
         return
       }
+
       // Check students table
-      const { data: student } = await supabase
+      const { data: student, error: studentError } = await supabase
         .from('students')
         .select('id')
         .eq('id', userId)
         .maybeSingle()
+
+      if (studentError) {
+        console.error('Student check error:', studentError)
+        // Don't clear userType on network errors, keep previous value
+        return
+      }
+
       if (student) {
         setUserType('student')
         return
       }
+
+      // Only clear userType if we successfully checked both tables and found no match
       setUserType(null)
     } catch (err) {
-      setUserType(null)
+      console.error('User type check error:', err)
+      // Don't clear userType on exceptions, keep previous value
     }
   }
 
