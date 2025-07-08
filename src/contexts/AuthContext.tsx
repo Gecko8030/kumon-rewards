@@ -26,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check user type (admin first, then student)
   const checkUserType = async (userId: string) => {
+    console.log('🔍 Checking user type for:', userId)
     try {
       // Check admin table first
       const { data: admin, error: adminError } = await supabase
@@ -35,12 +36,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (adminError) {
-        console.error('Admin check error:', adminError)
+        console.error('❌ Admin check error:', adminError)
         // Don't clear userType on network errors, keep previous value
         return
       }
 
       if (admin) {
+        console.log('✅ User is admin')
         setUserType('admin')
         return
       }
@@ -53,31 +55,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (studentError) {
-        console.error('Student check error:', studentError)
+        console.error('❌ Student check error:', studentError)
         // Don't clear userType on network errors, keep previous value
         return
       }
 
       if (student) {
+        console.log('✅ User is student')
         setUserType('student')
         return
       }
 
       // Only clear userType if we successfully checked both tables and found no match
+      console.log('❌ User not found in admin or student tables, clearing userType')
       setUserType(null)
     } catch (err) {
-      console.error('User type check error:', err)
+      console.error('❌ User type check error:', err)
       // Don't clear userType on exceptions, keep previous value
     }
   }
 
   // Handle session change and role restoration
   const handleSessionChange = async (session: Session | null) => {
+    console.log('🔄 Session change detected:', session ? 'User logged in' : 'User logged out')
     const currentUser = session?.user ?? null
+    console.log('👤 Current user:', currentUser?.id || 'None')
+
     setUser(currentUser)
     if (currentUser) {
+      console.log('🔍 Checking role for logged in user')
       await checkUserType(currentUser.id)
     } else {
+      console.log('🚪 User logged out, clearing userType')
       setUserType(null)
     }
     setLoading(false)
@@ -129,6 +138,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       delete (window as any).refreshUserType
     }
   }, [user])
+
+  useEffect(() => {
+    console.log('🎭 userType changed to:', userType)
+  }, [userType])
 
   return (
     <AuthContext.Provider value={{
