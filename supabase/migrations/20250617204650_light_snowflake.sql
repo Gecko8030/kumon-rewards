@@ -221,3 +221,5 @@ INSERT INTO rewards (name, description, cost, image_url, category) VALUES
   ('Board Game Collection', 'Fun family board games', 125, 'https://images.pexels.com/photos/163064/play-stone-network-networked-interactive-163064.jpeg', 'toys'),
   ('Gift Card - Target', '$25 Target gift card', 250, 'https://images.pexels.com/photos/264547/pexels-photo-264547.jpeg', 'gift-cards'),
   ('Movie Theater Tickets', 'Two movie tickets for weekend fun', 180, 'https://images.pexels.com/photos/7991579/pexels-photo-7991579.jpeg', 'experiences');
+
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS goal_url text;
