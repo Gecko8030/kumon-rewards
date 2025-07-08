@@ -3,7 +3,23 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'kumon-rewards-app'
+    }
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+})
 
 export type Database = {
   public: {
@@ -43,7 +59,7 @@ export type Database = {
           name: string
           description: string
           cost: number
-          image_url: string
+          image_url: string | null
           category: string
           available: boolean
           created_at: string
@@ -53,7 +69,7 @@ export type Database = {
           name: string
           description: string
           cost: number
-          image_url: string
+          image_url?: string | null
           category: string
           available?: boolean
           created_at?: string
@@ -63,7 +79,7 @@ export type Database = {
           name?: string
           description?: string
           cost?: number
-          image_url?: string
+          image_url?: string | null
           category?: string
           available?: boolean
           created_at?: string
@@ -118,7 +134,7 @@ export type Database = {
           created_at?: string
         }
       }
-      admins: {
+      admin: {
         Row: {
           id: string
           email: string

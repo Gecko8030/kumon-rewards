@@ -1,14 +1,13 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import toast from 'react-hot-toast'
+import { showToast } from '../lib/toast'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [userType, setUserType] = useState<'student' | 'admin'>('student')
   const [loading, setLoading] = useState(false)
-  const { signIn } = useAuth()
+  const { signIn, userType } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -16,11 +15,13 @@ export default function Login() {
     setLoading(true)
 
     try {
-      await signIn(email, password, userType)
-      toast.success('Welcome back!')
-      navigate(userType === 'student' ? '/dashboard' : '/admin')
+      await signIn(email, password)
+      showToast.success('Welcome back!')
+      
+      // Navigate to home and let the app handle routing based on user type
+      navigate('/')
     } catch (error: any) {
-      toast.error(error.message || 'Failed to sign in')
+      showToast.error(error.message || 'Failed to sign in')
     } finally {
       setLoading(false)
     }
@@ -36,31 +37,6 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex justify-center space-x-4 mb-6">
-              <button
-                type="button"
-                onClick={() => setUserType('student')}
-                className={`px-6 py-3 rounded-full font-bold transition-all duration-300 ${
-                  userType === 'student'
-                    ? 'bg-kumon-blue text-white shadow-lg'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                👨‍🎓 Student
-              </button>
-              <button
-                type="button"
-                onClick={() => setUserType('admin')}
-                className={`px-6 py-3 rounded-full font-bold transition-all duration-300 ${
-                  userType === 'admin'
-                    ? 'bg-kumon-orange text-white shadow-lg'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                👨‍🏫 Instructor
-              </button>
-            </div>
-
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { withRetry, isNetworkError, checkConnection } from '../lib/api'
 import { Users, DollarSign, Target, Package, Plus, Check, X, Edit, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -22,7 +23,7 @@ interface Goal {
   reward: {
     name: string
     cost: number
-    image_url: string
+    image_url: string | null
   }
 }
 
@@ -31,7 +32,7 @@ interface Reward {
   name: string
   description: string
   cost: number
-  image_url: string
+  image_url: string | null
   category: string
   available: boolean
 }
@@ -42,8 +43,11 @@ export default function AdminDashboard() {
   const [pendingGoals, setPendingGoals] = useState<Goal[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showAddReward, setShowAddReward] = useState(false)
   const [editingReward, setEditingReward] = useState<Reward | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [savingReward, setSavingReward] = useState(false)
 
   // Form states
   const [selectedStudent, setSelectedStudent] = useState('')
@@ -61,52 +65,119 @@ export default function AdminDashboard() {
     fetchData()
   }, [])
 
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.warn('Admin dashboard loading timeout reached')
+        setLoading(false)
+        // Don't set error if we have some data loaded
+        if (students.length === 0 && pendingGoals.length === 0 && rewards.length === 0) {
+          setError('Loading timeout - the database may be slow or unavailable. Please try refreshing.')
+        }
+      }
+    }, 20000) // Increased to 20 second timeout to prevent premature timeouts
+
+    return () => clearTimeout(timeout)
+  }, [loading, students.length, pendingGoals.length, rewards.length])
+
   const fetchData = async () => {
-    await Promise.all([
-      fetchStudents(),
-      fetchPendingGoals(),
-      fetchRewards()
-    ])
-    setLoading(false)
+    console.log('AdminDashboard: Starting to fetch data...')
+    try {
+      // Check connection first (but don't block if it fails)
+      try {
+        const isConnected = await checkConnection()
+        if (!isConnected) {
+          console.warn('AdminDashboard: No database connection detected, but continuing...')
+        }
+      } catch (error) {
+        console.warn('AdminDashboard: Connection check failed, but continuing...', error)
+      }
+
+      // Fetch data independently to prevent one failure from blocking others
+      const results = await Promise.allSettled([
+        fetchStudents(),
+        fetchPendingGoals(),
+        fetchRewards()
+      ])
+      
+      console.log('AdminDashboard: All fetch operations completed:', results.map(r => r.status))
+      setLoading(false)
+    } catch (error) {
+      console.error('Failed to fetch admin data:', error)
+      setError('Failed to load admin data')
+      setLoading(false)
+    }
   }
 
   const fetchStudents = async () => {
+    console.log('AdminDashboard: Fetching students...')
     try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .order('name')
+      const data = await withRetry(async () => {
+        // Add individual timeout for this operation
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Students fetch timeout')), 15000)
+        })
+        
+        const fetchPromise = supabase
+          .from('students')
+          .select('*')
+          .order('name')
 
-      if (error) throw error
+        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
+
+        if (error) throw error
+        return data
+      })
+
+      console.log('AdminDashboard: Students fetched successfully:', data?.length)
       setStudents(data)
     } catch (error) {
-      toast.error('Failed to load students')
+      console.error('Failed to load students:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error loading students' 
+        : 'Failed to load students'
+      toast.error(errorMessage)
+      // Don't throw error to prevent blocking other fetches
     }
   }
 
   const fetchPendingGoals = async () => {
+    console.log('AdminDashboard: Fetching pending goals...')
     try {
-      const { data, error } = await supabase
-        .from('goals')
-        .select(`
-          id,
-          status,
-          created_at,
-          students (
-            name,
-            email
-          ),
-          rewards (
-            name,
-            cost,
-            image_url
-          )
-        `)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
+      const data = await withRetry(async () => {
+        // Add individual timeout for this operation
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Goals fetch timeout')), 15000)
+        })
+        
+        const fetchPromise = supabase
+          .from('goals')
+          .select(`
+            id,
+            status,
+            created_at,
+            students (
+              name,
+              email
+            ),
+            rewards (
+              name,
+              cost,
+              image_url
+            )
+          `)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
 
-      if (error) throw error
-      setPendingGoals(data.map(goal => ({
+        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
+
+        if (error) throw error
+        return data
+      })
+
+      console.log('AdminDashboard: Pending goals fetched successfully:', data?.length)
+      setPendingGoals(data.map((goal: any) => ({
         id: goal.id,
         status: goal.status,
         created_at: goal.created_at,
@@ -114,21 +185,44 @@ export default function AdminDashboard() {
         reward: goal.rewards as any
       })))
     } catch (error) {
-      toast.error('Failed to load pending goals')
+      console.error('Failed to load pending goals:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error loading goals' 
+        : 'Failed to load pending goals'
+      toast.error(errorMessage)
+      // Don't throw error to prevent blocking other fetches
     }
   }
 
   const fetchRewards = async () => {
+    console.log('AdminDashboard: Fetching rewards...')
     try {
-      const { data, error } = await supabase
-        .from('rewards')
-        .select('*')
-        .order('name')
+      const data = await withRetry(async () => {
+        // Add individual timeout for this operation
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Rewards fetch timeout')), 15000)
+        })
+        
+        const fetchPromise = supabase
+          .from('rewards')
+          .select('*')
+          .order('name')
 
-      if (error) throw error
+        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
+
+        if (error) throw error
+        return data
+      })
+
+      console.log('AdminDashboard: Rewards fetched successfully:', data?.length)
       setRewards(data)
     } catch (error) {
-      toast.error('Failed to load rewards')
+      console.error('Failed to load rewards:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error loading rewards' 
+        : 'Failed to load rewards'
+      toast.error(errorMessage)
+      // Don't throw error to prevent blocking other fetches
     }
   }
 
@@ -141,97 +235,165 @@ export default function AdminDashboard() {
 
     try {
       const amount = parseInt(dollarAmount)
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Please enter a valid amount (positive number)')
+        return
+      }
       
-      // Update student balance
-      const { error: updateError } = await supabase.rpc('add_kumon_dollars', {
-        student_id: selectedStudent,
-        amount: amount
-      })
-
-      if (updateError) throw updateError
-
-      // Add transaction record
-      const { error: transactionError } = await supabase
-        .from('transactions')
-        .insert({
+      // Update student balance with retry
+      await withRetry(async () => {
+        const { error: updateError } = await supabase.rpc('add_kumon_dollars', {
           student_id: selectedStudent,
-          amount: amount,
-          type: 'earned',
-          description: description
+          amount: amount
         })
 
-      if (transactionError) throw transactionError
+        if (updateError) throw updateError
+      })
+
+      // Add transaction record with retry
+      await withRetry(async () => {
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .insert({
+            student_id: selectedStudent,
+            amount: amount,
+            type: 'earned',
+            description: description
+          })
+
+        if (transactionError) throw transactionError
+      })
 
       toast.success('Kumon Dollars added successfully!')
       setSelectedStudent('')
       setDollarAmount('')
       setDescription('')
-      fetchStudents()
+      
+      // Refresh students list with retry
+      try {
+        await fetchStudents()
+      } catch (error) {
+        console.error('Failed to refresh students after adding dollars:', error)
+        // Don't show error to user since the operation was successful
+      }
     } catch (error) {
-      toast.error('Failed to add Kumon Dollars')
+      console.error('Failed to add Kumon Dollars:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please try again' 
+        : 'Failed to add Kumon Dollars'
+      toast.error(errorMessage)
     }
   }
 
   const approveGoal = async (goalId: string) => {
     try {
-      const { error } = await supabase
-        .from('goals')
-        .update({ status: 'approved' })
-        .eq('id', goalId)
+      await withRetry(async () => {
+        const { error } = await supabase
+          .from('goals')
+          .update({ status: 'approved' })
+          .eq('id', goalId)
 
-      if (error) throw error
+        if (error) throw error
+      })
+      
       toast.success('Goal approved!')
-      fetchPendingGoals()
+      
+      // Refresh goals list with retry
+      try {
+        await fetchPendingGoals()
+      } catch (error) {
+        console.error('Failed to refresh goals after approval:', error)
+        // Don't show error to user since the approval was successful
+      }
     } catch (error) {
-      toast.error('Failed to approve goal')
+      console.error('Failed to approve goal:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please try again' 
+        : 'Failed to approve goal'
+      toast.error(errorMessage)
     }
   }
 
   const rejectGoal = async (goalId: string) => {
     try {
-      const { error } = await supabase
-        .from('goals')
-        .update({ status: 'rejected' })
-        .eq('id', goalId)
+      await withRetry(async () => {
+        const { error } = await supabase
+          .from('goals')
+          .update({ status: 'rejected' })
+          .eq('id', goalId)
 
-      if (error) throw error
+        if (error) throw error
+      })
+      
       toast.success('Goal rejected')
-      fetchPendingGoals()
+      
+      // Refresh goals list with retry
+      try {
+        await fetchPendingGoals()
+      } catch (error) {
+        console.error('Failed to refresh goals after rejection:', error)
+        // Don't show error to user since the rejection was successful
+      }
     } catch (error) {
-      toast.error('Failed to reject goal')
+      console.error('Failed to reject goal:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please try again' 
+        : 'Failed to reject goal'
+      toast.error(errorMessage)
     }
   }
 
   const saveReward = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (savingReward) return // Prevent multiple submissions
+    
+    // Validate form data
+    if (!newReward.name.trim() || !newReward.description.trim() || !newReward.cost) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    const cost = parseInt(newReward.cost)
+    if (isNaN(cost) || cost <= 0) {
+      toast.error('Please enter a valid cost (positive number)')
+      return
+    }
+    
+    setSavingReward(true)
+    
     try {
       const rewardData = {
-        name: newReward.name,
-        description: newReward.description,
-        cost: parseInt(newReward.cost),
-        image_url: newReward.image_url,
+        name: newReward.name.trim(),
+        description: newReward.description.trim(),
+        cost: cost,
+        image_url: newReward.image_url.trim() || null,
         category: newReward.category,
         available: true
       }
 
       if (editingReward) {
-        const { error } = await supabase
-          .from('rewards')
-          .update(rewardData)
-          .eq('id', editingReward.id)
+        await withRetry(async () => {
+          const { error } = await supabase
+            .from('rewards')
+            .update(rewardData)
+            .eq('id', editingReward.id)
 
-        if (error) throw error
+          if (error) throw error
+        })
         toast.success('Reward updated!')
       } else {
-        const { error } = await supabase
-          .from('rewards')
-          .insert(rewardData)
+        await withRetry(async () => {
+          const { error } = await supabase
+            .from('rewards')
+            .insert(rewardData)
 
-        if (error) throw error
+          if (error) throw error
+        })
         toast.success('Reward added!')
       }
 
+      // Reset form
       setShowAddReward(false)
       setEditingReward(null)
       setNewReward({
@@ -241,9 +403,22 @@ export default function AdminDashboard() {
         image_url: '',
         category: 'toys'
       })
-      fetchRewards()
+
+      // Refresh rewards list with retry
+      try {
+        await fetchRewards()
+      } catch (error) {
+        console.error('Failed to refresh rewards after save:', error)
+        // Don't show error to user since the save was successful
+      }
     } catch (error) {
-      toast.error('Failed to save reward')
+      console.error('Failed to save reward:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please try again' 
+        : 'Failed to save reward'
+      toast.error(errorMessage)
+    } finally {
+      setSavingReward(false)
     }
   }
 
@@ -251,16 +426,30 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to delete this reward?')) return
 
     try {
-      const { error } = await supabase
-        .from('rewards')
-        .delete()
-        .eq('id', rewardId)
+      await withRetry(async () => {
+        const { error } = await supabase
+          .from('rewards')
+          .delete()
+          .eq('id', rewardId)
 
-      if (error) throw error
+        if (error) throw error
+      })
+      
       toast.success('Reward deleted')
-      fetchRewards()
+      
+      // Refresh rewards list with retry
+      try {
+        await fetchRewards()
+      } catch (error) {
+        console.error('Failed to refresh rewards after delete:', error)
+        // Don't show error to user since the delete was successful
+      }
     } catch (error) {
-      toast.error('Failed to delete reward')
+      console.error('Failed to delete reward:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please try again' 
+        : 'Failed to delete reward'
+      toast.error(errorMessage)
     }
   }
 
@@ -270,7 +459,7 @@ export default function AdminDashboard() {
       name: reward.name,
       description: reward.description,
       cost: reward.cost.toString(),
-      image_url: reward.image_url,
+      image_url: reward.image_url || '',
       category: reward.category
     })
     setShowAddReward(true)
@@ -278,8 +467,55 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue"></div>
+      <div className="min-h-screen py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-white mb-4">👨‍🏫 Admin Dashboard</h1>
+          </div>
+          
+          <div className="bg-white rounded-2xl card-shadow p-8 text-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue mx-auto mb-4"></div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Loading Admin Dashboard</h2>
+            <p className="text-gray-600">Connecting to database and loading data...</p>
+            <p className="text-sm text-gray-500 mt-2">This may take a few seconds</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-white mb-4">👨‍🏫 Admin Dashboard</h1>
+          </div>
+          
+          <div className="bg-white rounded-2xl card-shadow p-8 text-center">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Connection Issue</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <div className="space-x-4">
+              <button 
+                onClick={() => {
+                  setLoading(true)
+                  setError(null)
+                  fetchData()
+                }}
+                className="btn-primary"
+              >
+                Try Again
+              </button>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Refresh Page
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -289,7 +525,24 @@ export default function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-4">👨‍🏫 Admin Dashboard</h1>
+          <div className="flex items-center justify-between mb-4">
+            <div></div> {/* Spacer */}
+            <h1 className="text-4xl font-bold text-white">👨‍🏫 Admin Dashboard</h1>
+            <button
+              onClick={() => {
+                setRefreshing(true)
+                setError(null)
+                fetchData().finally(() => setRefreshing(false))
+              }}
+              disabled={refreshing}
+              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
+            >
+              <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+          </div>
           <p className="text-xl text-white">Manage students, rewards, and goals</p>
         </div>
 
@@ -407,11 +660,17 @@ export default function AdminDashboard() {
                       <div key={goal.id} className="bg-gray-50 rounded-lg p-6">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-4">
-                            <img
-                              src={goal.reward.image_url}
-                              alt={goal.reward.name}
-                              className="w-16 h-16 rounded-lg object-cover"
-                            />
+                            {goal.reward.image_url ? (
+                              <img
+                                src={goal.reward.image_url}
+                                alt={goal.reward.name}
+                                className="w-16 h-16 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
+                                <span className="text-gray-500 text-xs">No Image</span>
+                              </div>
+                            )}
                             <div>
                               <h4 className="font-bold text-gray-900">{goal.reward.name}</h4>
                               <p className="text-sm text-gray-600">
@@ -503,12 +762,11 @@ export default function AdminDashboard() {
                       />
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input
-                          type="url"
-                          placeholder="Image URL"
+                          type="text"
+                          name="image_url"
+                          placeholder="Image URL (optional)"
                           value={newReward.image_url}
                           onChange={(e) => setNewReward({...newReward, image_url: e.target.value})}
-                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
-                          required
                         />
                         <select
                           value={newReward.category}
@@ -523,11 +781,19 @@ export default function AdminDashboard() {
                         </select>
                       </div>
                       <div className="flex space-x-4">
-                        <button type="submit" className="btn-primary">
-                          {editingReward ? 'Update Reward' : 'Add Reward'}
+                        <button 
+                          type="submit" 
+                          disabled={savingReward}
+                          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                        >
+                          {savingReward && (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          )}
+                          <span>{editingReward ? 'Update Reward' : 'Add Reward'}</span>
                         </button>
                         <button
                           type="button"
+                          disabled={savingReward}
                           onClick={() => {
                             setShowAddReward(false)
                             setEditingReward(null)
@@ -539,7 +805,7 @@ export default function AdminDashboard() {
                               category: 'toys'
                             })
                           }}
-                          className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Cancel
                         </button>
@@ -552,11 +818,13 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {rewards.map(reward => (
                     <div key={reward.id} className="bg-gray-50 rounded-lg p-4">
-                      <img
-                        src={reward.image_url}
-                        alt={reward.name}
-                        className="w-full h-32 object-cover rounded-lg mb-3"
-                      />
+                      {reward.image_url && (
+                        <img
+                          src={reward.image_url}
+                          alt={reward.name}
+                          className="w-full h-32 object-cover rounded-lg mb-3"
+                        />
+                      )}
                       <h4 className="font-bold text-gray-900">{reward.name}</h4>
                       <p className="text-sm text-gray-600 mb-2">{reward.description}</p>
                       <div className="flex items-center justify-between mb-3">

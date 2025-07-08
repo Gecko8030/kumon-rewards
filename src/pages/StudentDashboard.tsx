@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { withRetry, isNetworkError } from '../lib/api'
 import { Coins, Target, TrendingUp, Gift } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface Student {
   id: string
   name: string
-  level: string
   avatar_url: string | null
   kumon_dollars: number
 }
@@ -17,7 +17,7 @@ interface Goal {
   reward: {
     name: string
     cost: number
-    image_url: string
+    image_url: string | null
   }
   status: string
 }
@@ -31,87 +31,220 @@ interface Transaction {
 }
 
 export default function StudentDashboard() {
-  const { user } = useAuth()
+  const { user, userType, loading: authLoading } = useAuth()
   const [student, setStudent] = useState<Student | null>(null)
   const [currentGoal, setCurrentGoal] = useState<Goal | null>(null)
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sessionVerified, setSessionVerified] = useState(false)
 
+  // Verify session and role on mount and when auth state changes
   useEffect(() => {
-    if (user) {
-      fetchStudentData()
-      fetchCurrentGoal()
-      fetchRecentTransactions()
+    const verifySessionAndRole = async () => {
+      if (authLoading) return
+
+      try {
+        // Check if user is authenticated
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session verification failed:', sessionError)
+          setError('Authentication error. Please log in again.')
+          setLoading(false)
+          return
+        }
+
+        if (!session) {
+          console.log('No active session found')
+          setError('No active session. Please log in again.')
+          setLoading(false)
+          return
+        }
+
+        // Verify user is a student
+        if (userType !== 'student') {
+          console.log('User is not a student:', userType)
+          setError('Access denied. Student account required.')
+          setLoading(false)
+          return
+        }
+
+        console.log('Session and role verified successfully')
+        setSessionVerified(true)
+        
+        // Fetch data only after session and role are verified
+        await fetchStudentData()
+        await fetchCurrentGoal()
+        await fetchRecentTransactions()
+        
+      } catch (error) {
+        console.error('Session verification error:', error)
+        setError('Failed to verify session. Please refresh the page.')
+        setLoading(false)
+      }
     }
-  }, [user])
+
+    verifySessionAndRole()
+  }, [user, userType, authLoading])
 
   const fetchStudentData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('id', user?.id)
-        .single()
+    if (!user?.id) {
+      console.log('No user ID available for fetching student data')
+      return
+    }
 
-      if (error) throw error
+    try {
+      console.log('Fetching student data for user:', user.id)
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        if (error) {
+          console.error('Student data fetch error:', error)
+          throw error
+        }
+        return data
+      })
+
+      console.log('Student data fetched successfully:', data)
       setStudent(data)
     } catch (error) {
-      toast.error('Failed to load student data')
+      console.error('Failed to load student data:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please check your connection' 
+        : 'Failed to load student data'
+      setError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 
   const fetchCurrentGoal = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('goals')
-        .select(`
-          id,
-          status,
-          rewards (
-            name,
-            cost,
-            image_url
-          )
-        `)
-        .eq('student_id', user?.id)
-        .eq('status', 'approved')
-        .single()
+    if (!user?.id) {
+      console.log('No user ID available for fetching goals')
+      return
+    }
 
-      if (error && error.code !== 'PGRST116') throw error
+    try {
+      console.log('Fetching current goal for user:', user.id)
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('goals')
+          .select(`
+            id,
+            status,
+            rewards (
+              name,
+              cost,
+              image_url
+            )
+          `)
+          .eq('student_id', user.id)
+          .eq('status', 'approved')
+          .single()
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Goal fetch error:', error)
+          throw error
+        }
+        return data
+      })
+
       if (data) {
+        console.log('Current goal fetched successfully:', data)
         setCurrentGoal({
           id: data.id,
           reward: data.rewards as any,
           status: data.status
         })
+      } else {
+        console.log('No current goal found')
       }
     } catch (error) {
       console.error('Error fetching goal:', error)
+      // Don't set error state for goals as they're optional
     }
   }
 
   const fetchRecentTransactions = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('student_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(5)
+    if (!user?.id) {
+      console.log('No user ID available for fetching transactions')
+      return
+    }
 
-      if (error) throw error
+    try {
+      console.log('Fetching recent transactions for user:', user.id)
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('student_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (error) {
+          console.error('Transactions fetch error:', error)
+          throw error
+        }
+        return data
+      })
+
+      console.log('Recent transactions fetched successfully:', data)
       setRecentTransactions(data)
     } catch (error) {
       console.error('Error fetching transactions:', error)
+      // Don't set error state for transactions as they're optional
     } finally {
       setLoading(false)
     }
+  }
+
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading && sessionVerified) {
+        console.warn('Dashboard loading timeout reached')
+        setLoading(false)
+        setError('Loading timeout - please refresh the page')
+      }
+    }, 15000) // 15 second timeout
+
+    return () => clearTimeout(timeout)
+  }, [loading, sessionVerified])
+
+  // Show loading while auth is loading or session is being verified
+  if (authLoading || !sessionVerified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue"></div>
+      </div>
+    )
   }
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Dashboard</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="btn-primary"
+          >
+            Refresh Page
+          </button>
+        </div>
       </div>
     )
   }
@@ -145,9 +278,9 @@ export default function StudentDashboard() {
               )}
             </div>
             <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Welcome back, {student.name}! 🌟</h1>
-              <p className="text-xl text-gray-600">Level: {student.level}</p>
-            </div>
+  <h1 className="text-4xl font-bold text-gray-900 mb-2">Welcome back, {student.name}! 🌟</h1>
+</div>
+
           </div>
         </div>
 
@@ -172,11 +305,17 @@ export default function StudentDashboard() {
             {currentGoal ? (
               <div>
                 <div className="flex items-center space-x-4 mb-6">
-                  <img 
-                    src={currentGoal.reward.image_url} 
-                    alt={currentGoal.reward.name}
-                    className="w-20 h-20 rounded-lg object-cover"
-                  />
+                  {currentGoal.reward.image_url ? (
+                    <img 
+                      src={currentGoal.reward.image_url} 
+                      alt={currentGoal.reward.name}
+                      className="w-20 h-20 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg bg-gray-200 flex items-center justify-center">
+                      <span className="text-gray-500 text-xs">No Image</span>
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">{currentGoal.reward.name}</h3>
                     <p className="text-lg text-gray-600">Cost: {currentGoal.reward.cost} Kumon Dollars</p>

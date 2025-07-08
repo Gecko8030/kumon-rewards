@@ -36,9 +36,6 @@ export default function Home() {
                 <Link to="/dashboard" className="btn-primary text-xl px-8 py-4">
                   My Dashboard
                 </Link>
-                <Link to="/shop" className="btn-secondary text-xl px-8 py-4">
-                  Reward Shop
-                </Link>
               </div>
             )}
             

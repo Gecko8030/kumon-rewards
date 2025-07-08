@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { withRetry, isNetworkError } from '../lib/api'
 import { Target, TrendingUp, Clock, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -13,7 +14,7 @@ interface Goal {
     name: string
     description: string
     cost: number
-    image_url: string
+    image_url: string | null
   }
 }
 
@@ -22,75 +23,193 @@ interface Student {
 }
 
 export default function GoalTracker() {
-  const { user } = useAuth()
+  const { user, userType, loading: authLoading } = useAuth()
   const [currentGoal, setCurrentGoal] = useState<Goal | null>(null)
   const [student, setStudent] = useState<Student | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sessionVerified, setSessionVerified] = useState(false)
 
+  // Verify session and role on mount and when auth state changes
   useEffect(() => {
-    if (user) {
-      fetchCurrentGoal()
-      fetchStudentData()
+    const verifySessionAndRole = async () => {
+      if (authLoading) return
+
+      try {
+        // Check if user is authenticated
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session verification failed:', sessionError)
+          setError('Authentication error. Please log in again.')
+          setLoading(false)
+          return
+        }
+
+        if (!session) {
+          console.log('No active session found')
+          setError('No active session. Please log in again.')
+          setLoading(false)
+          return
+        }
+
+        // Verify user is a student
+        if (userType !== 'student') {
+          console.log('User is not a student:', userType)
+          setError('Access denied. Student account required.')
+          setLoading(false)
+          return
+        }
+
+        console.log('Session and role verified successfully')
+        setSessionVerified(true)
+        
+        // Fetch data only after session and role are verified
+        await fetchCurrentGoal()
+        await fetchStudentData()
+        
+      } catch (error) {
+        console.error('Session verification error:', error)
+        setError('Failed to verify session. Please refresh the page.')
+        setLoading(false)
+      }
     }
-  }, [user])
+
+    verifySessionAndRole()
+  }, [user, userType, authLoading])
 
   const fetchCurrentGoal = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('goals')
-        .select(`
-          id,
-          status,
-          created_at,
-          rewards (
-            id,
-            name,
-            description,
-            cost,
-            image_url
-          )
-        `)
-        .eq('student_id', user?.id)
-        .in('status', ['pending', 'approved'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
+    if (!user?.id) {
+      console.log('No user ID available for fetching goals')
+      return
+    }
 
-      if (error && error.code !== 'PGRST116') throw error
+    try {
+      console.log('Fetching current goal for user:', user.id)
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('goals')
+          .select(`
+            id,
+            status,
+            created_at,
+            rewards (
+              id,
+              name,
+              description,
+              cost,
+              image_url
+            )
+          `)
+          .eq('student_id', user.id)
+          .in('status', ['pending', 'approved'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Goal fetch error:', error)
+          throw error
+        }
+        return data
+      })
+
       if (data) {
+        console.log('Current goal fetched successfully:', data)
         setCurrentGoal({
           id: data.id,
           status: data.status,
           created_at: data.created_at,
           reward: data.rewards as any
         })
+      } else {
+        console.log('No current goal found')
       }
     } catch (error) {
       console.error('Error fetching goal:', error)
+      // Don't set error state for goals as they're optional
     }
   }
 
   const fetchStudentData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('kumon_dollars')
-        .eq('id', user?.id)
-        .single()
+    if (!user?.id) {
+      console.log('No user ID available for fetching student data')
+      return
+    }
 
-      if (error) throw error
+    try {
+      console.log('Fetching student data for user:', user.id)
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('students')
+          .select('kumon_dollars')
+          .eq('id', user.id)
+          .single()
+
+        if (error) {
+          console.error('Student data fetch error:', error)
+          throw error
+        }
+        return data
+      })
+
+      console.log('Student data fetched successfully:', data)
       setStudent(data)
     } catch (error) {
-      toast.error('Failed to load student data')
+      console.error('Failed to load student data:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please check your connection' 
+        : 'Failed to load student data'
+      setError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
+  }
+
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading && sessionVerified) {
+        console.warn('Goal tracker loading timeout reached')
+        setLoading(false)
+        setError('Loading timeout - please refresh the page')
+      }
+    }, 15000) // 15 second timeout
+
+    return () => clearTimeout(timeout)
+  }, [loading, sessionVerified])
+
+  // Show loading while auth is loading or session is being verified
+  if (authLoading || !sessionVerified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue"></div>
+      </div>
+    )
   }
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Goal Tracker</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="btn-primary"
+          >
+            Refresh Page
+          </button>
+        </div>
       </div>
     )
   }
@@ -165,11 +284,17 @@ export default function GoalTracker() {
         <div className="bg-white rounded-2xl card-shadow p-8 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <div>
-              <img
-                src={currentGoal.reward.image_url}
-                alt={currentGoal.reward.name}
-                className="w-full h-64 object-cover rounded-lg"
-              />
+              {currentGoal.reward.image_url ? (
+                <img
+                  src={currentGoal.reward.image_url}
+                  alt={currentGoal.reward.name}
+                  className="w-full h-64 object-cover rounded-lg"
+                />
+              ) : (
+                <div className="w-full h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <span className="text-gray-500 text-lg">No Image Available</span>
+                </div>
+              )}
             </div>
             <div>
               <h2 className="text-3xl font-bold text-gray-900 mb-4">{currentGoal.reward.name}</h2>
@@ -199,50 +324,26 @@ export default function GoalTracker() {
                 <span>Kumon Dollars Saved: {student.kumon_dollars}</span>
                 <span>Goal: {currentGoal.reward.cost}</span>
               </div>
-              <div className="w-full bg-white bg-opacity-30 rounded-full h-8">
-                <div
-                  className="bg-gradient-to-r from-kumon-yellow to-kumon-orange h-8 rounded-full flex items-center justify-center text-white text-sm font-bold transition-all duration-500"
+              <div className="w-full bg-white bg-opacity-20 rounded-full h-6">
+                <div 
+                  className="bg-kumon-yellow h-6 rounded-full flex items-center justify-center text-white text-sm font-bold transition-all duration-500"
                   style={{ width: `${progressPercentage}%` }}
                 >
-                  {progressPercentage > 15 && `${Math.round(progressPercentage)}%`}
+                  {progressPercentage > 20 && `${Math.round(progressPercentage)}%`}
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {dollarsNeeded > 0 ? (
               <div className="text-center">
-                <div className="text-3xl mb-2">💰</div>
-                <div className="text-2xl font-bold">{student.kumon_dollars}</div>
-                <div className="text-sm opacity-80">Dollars Saved</div>
+                <p className="text-xl mb-4">You need {dollarsNeeded} more Kumon Dollars to reach your goal!</p>
+                <p className="text-lg opacity-90">Keep up the great work! 💪</p>
               </div>
+            ) : (
               <div className="text-center">
-                <div className="text-3xl mb-2">🎯</div>
-                <div className="text-2xl font-bold">{dollarsNeeded}</div>
-                <div className="text-sm opacity-80">Dollars Needed</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl mb-2">📈</div>
-                <div className="text-2xl font-bold">{Math.round(progressPercentage)}%</div>
-                <div className="text-sm opacity-80">Progress</div>
-              </div>
-            </div>
-
-            {progressPercentage >= 100 && (
-              <div className="mt-8 bg-white bg-opacity-20 rounded-lg p-6 text-center">
-                <div className="text-4xl mb-4">🎉</div>
+                <div className="text-6xl mb-4">🎉</div>
                 <h3 className="text-2xl font-bold mb-2">Congratulations!</h3>
-                <p className="text-lg">
-                  You've reached your goal! Contact your instructor to claim your reward.
-                </p>
-              </div>
-            )}
-
-            {progressPercentage < 100 && (
-              <div className="mt-8 bg-white bg-opacity-20 rounded-lg p-6 text-center">
-                <h3 className="text-xl font-bold mb-2">Keep Going!</h3>
-                <p className="text-lg">
-                  You need {dollarsNeeded} more Kumon Dollars to reach your goal. Keep learning!
-                </p>
+                <p className="text-xl">You've reached your goal! Contact your instructor to claim your reward.</p>
               </div>
             )}
           </div>

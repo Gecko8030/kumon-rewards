@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { withRetry, isNetworkError } from '../lib/api'
 import { Search, Filter, Target } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -9,7 +10,7 @@ interface Reward {
   name: string
   description: string
   cost: number
-  image_url: string
+  image_url: string | null
   category: string
   available: boolean
 }
@@ -22,6 +23,8 @@ export default function RewardShop() {
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [priceRange, setPriceRange] = useState('all')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sessionVerified, setSessionVerified] = useState(false)
 
   const categories = ['all', 'toys', 'books', 'electronics', 'gift-cards', 'experiences']
   const priceRanges = [
@@ -32,9 +35,36 @@ export default function RewardShop() {
     { value: '201+', label: '201+ Dollars' }
   ]
 
+  // Verify session and role on mount and when auth state changes
   useEffect(() => {
-    if (!authLoading) fetchRewards()
-  }, [authLoading])
+    const verifySessionAndRole = async () => {
+      if (authLoading) return
+
+      try {
+        // Check if user is authenticated (optional for shop - can be viewed by anyone)
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session verification failed:', sessionError)
+          // Don't block shop access for session errors
+        }
+
+        console.log('Session verified for shop access')
+        setSessionVerified(true)
+        
+        // Fetch data only after session is verified
+        await fetchRewards()
+        
+      } catch (error) {
+        console.error('Session verification error:', error)
+        // Don't block shop access for session errors
+        setSessionVerified(true)
+        await fetchRewards()
+      }
+    }
+
+    verifySessionAndRole()
+  }, [user, userType, authLoading])
 
   useEffect(() => {
     filterRewards()
@@ -42,16 +72,30 @@ export default function RewardShop() {
 
   const fetchRewards = async () => {
     try {
-      const { data, error } = await supabase
-        .from('rewards')
-        .select('*')
-        .eq('available', true)
-        .order('cost', { ascending: true })
+      console.log('Fetching rewards...')
+      const data = await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('rewards')
+          .select('*')
+          .eq('available', true)
+          .order('cost', { ascending: true })
 
-      if (error) throw error
+        if (error) {
+          console.error('Rewards fetch error:', error)
+          throw error
+        }
+        return data
+      })
+
+      console.log('Rewards fetched successfully:', data?.length)
       setRewards(data)
     } catch (error) {
-      toast.error('Failed to load rewards')
+      console.error('Failed to load rewards:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please check your connection' 
+        : 'Failed to load rewards'
+      setError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -89,6 +133,7 @@ export default function RewardShop() {
     }
 
     try {
+      console.log('Setting goal for reward:', rewardId)
       const { data: existingGoal } = await supabase
         .from('goals')
         .select('id')
@@ -109,17 +154,62 @@ export default function RewardShop() {
           status: 'pending'
         })
 
-      if (error) throw error
+      if (error) {
+        console.error('Goal creation error:', error)
+        throw error
+      }
+      
+      console.log('Goal set successfully')
       toast.success('Goal set! Waiting for instructor approval.')
     } catch (error) {
+      console.error('Failed to set goal:', error)
       toast.error('Failed to set goal')
     }
   }
 
-  if (authLoading || loading) {
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading && sessionVerified) {
+        console.warn('Reward shop loading timeout reached')
+        setLoading(false)
+        setError('Loading timeout - please refresh the page')
+      }
+    }, 15000) // 15 second timeout
+
+    return () => clearTimeout(timeout)
+  }, [loading, sessionVerified])
+
+  // Show loading while auth is loading or session is being verified
+  if (authLoading || !sessionVerified) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue"></div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-kumon-blue"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Reward Shop</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="btn-primary"
+          >
+            Refresh Page
+          </button>
+        </div>
       </div>
     )
   }
@@ -185,11 +275,17 @@ export default function RewardShop() {
             {filteredRewards.map((reward) => (
               <div key={reward.id} className="bg-white rounded-2xl card-shadow overflow-hidden transform hover:scale-105 transition-all duration-300">
                 <div className="aspect-w-1 aspect-h-1">
-                  <img
-                    src={reward.image_url}
-                    alt={reward.name}
-                    className="w-full h-48 object-cover"
-                  />
+                  {reward.image_url ? (
+                    <img
+                      src={reward.image_url}
+                      alt={reward.name}
+                      className="w-full h-48 object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
+                      <span className="text-gray-500">No Image</span>
+                    </div>
+                  )}
                 </div>
                 <div className="p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{reward.name}</h3>
@@ -199,27 +295,24 @@ export default function RewardShop() {
                     <div className="flex items-center space-x-1">
                       <span className="text-2xl">💰</span>
                       <span className="text-2xl font-bold text-kumon-orange">{reward.cost}</span>
+                      <span className="text-sm text-gray-600">Dollars</span>
                     </div>
-                    <span className="px-3 py-1 bg-kumon-blue bg-opacity-20 text-kumon-blue rounded-full text-sm font-medium">
-                      {reward.category}
-                    </span>
+                    <span className="text-xs text-gray-500 capitalize">{reward.category}</span>
                   </div>
 
                   {user && userType === 'student' && (
                     <button
                       onClick={() => setAsGoal(reward.id)}
-                      className="w-full btn-success flex items-center justify-center space-x-2"
+                      className="w-full btn-primary flex items-center justify-center space-x-2"
                     >
-                      <Target size={18} />
+                      <Target size={16} />
                       <span>Set as Goal</span>
                     </button>
                   )}
 
                   {!user && (
-                    <div className="text-center text-gray-500 text-sm">
-                      <a href="/login" className="text-kumon-blue hover:underline">
-                        Log in to set goals
-                      </a>
+                    <div className="text-center text-sm text-gray-500">
+                      <p>Log in as a student to set goals</p>
                     </div>
                   )}
                 </div>
@@ -228,9 +321,11 @@ export default function RewardShop() {
           </div>
         ) : (
           <div className="text-center py-12">
-            <div className="text-6xl mb-4">🔍</div>
-            <h3 className="text-2xl font-bold text-white mb-2">No rewards found</h3>
-            <p className="text-white opacity-80">Try adjusting your search or filters</p>
+            <div className="bg-white rounded-2xl card-shadow p-8">
+              <div className="text-6xl mb-4">🔍</div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">No rewards found</h3>
+              <p className="text-gray-600">Try adjusting your search or filters</p>
+            </div>
           </div>
         )}
       </div>
