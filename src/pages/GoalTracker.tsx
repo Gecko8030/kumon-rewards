@@ -182,7 +182,7 @@ export default function GoalTracker() {
       if (loading && sessionVerified) {
         console.warn('Goal tracker loading timeout reached')
         setLoading(false)
-        setError('Loading timeout - please refresh the page')
+        // Do not set error here; let the UI show the custom goal form if no goal is found
       }
     }, 15000) // 15 second timeout
 
