@@ -25,6 +25,7 @@ interface Goal {
     cost: number
     image_url: string | null
   }
+  goal_url?: string | null // Added goal_url to the Goal interface
 }
 
 interface Reward {
@@ -165,7 +166,8 @@ export default function AdminDashboard() {
               name,
               cost,
               image_url
-            )
+            ),
+            goal_url
           `)
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
@@ -182,7 +184,8 @@ export default function AdminDashboard() {
         status: goal.status,
         created_at: goal.created_at,
         student: goal.students as any,
-        reward: goal.rewards as any
+        reward: goal.rewards as any,
+        goal_url: goal.goal_url // Add goal_url to the mapped object
       })))
     } catch (error) {
       console.error('Failed to load pending goals:', error)
@@ -684,6 +687,18 @@ export default function AdminDashboard() {
                               </p>
                             </div>
                           </div>
+                          {goal.goal_url && (
+                            <div className="mt-2">
+                              <a
+                                href={goal.goal_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-kumon-blue underline break-all"
+                              >
+                                View Product Link
+                              </a>
+                            </div>
+                          )}
                           <div className="flex space-x-2">
                             <button
                               onClick={() => approveGoal(goal.id)}

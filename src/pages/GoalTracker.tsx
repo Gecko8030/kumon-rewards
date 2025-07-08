@@ -30,6 +30,10 @@ export default function GoalTracker() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sessionVerified, setSessionVerified] = useState(false)
+  const [customGoalName, setCustomGoalName] = useState('');
+  const [customGoalDescription, setCustomGoalDescription] = useState('');
+  const [customGoalUrl, setCustomGoalUrl] = useState('');
+  const [submittingCustomGoal, setSubmittingCustomGoal] = useState(false);
 
   // Verify session and role on mount and when auth state changes
   useEffect(() => {
@@ -225,13 +229,75 @@ export default function GoalTracker() {
       <div className="min-h-screen py-8">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <div className="bg-white rounded-2xl card-shadow p-12">
+            <div className="bg-white rounded-2xl card-shadow p-12 mb-8">
               <Target className="mx-auto text-gray-400 mb-6" size={80} />
               <h1 className="text-3xl font-bold text-gray-900 mb-4">No Active Goal</h1>
-              <p className="text-xl text-gray-600">
+              <p className="text-xl text-gray-600 mb-6">
                 You don't have any active goals right now.
               </p>
-              {/* Button Removed */}
+              {/* Custom Goal Submission Form */}
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setSubmittingCustomGoal(true);
+                  try {
+                    const { error } = await supabase
+                      .from('goals')
+                      .insert({
+                        student_id: user.id,
+                        reward_id: null,
+                        status: 'pending',
+                        goal_url: customGoalUrl || null,
+                        custom_name: customGoalName,
+                        custom_description: customGoalDescription
+                      });
+                    if (error) throw error;
+                    toast.success('Goal submitted for approval!');
+                    setCustomGoalName('');
+                    setCustomGoalDescription('');
+                    setCustomGoalUrl('');
+                    // Refetch goal state
+                    await fetchCurrentGoal();
+                  } catch (err) {
+                    toast.error('Failed to submit goal');
+                  } finally {
+                    setSubmittingCustomGoal(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <input
+                  type="text"
+                  placeholder="Goal Name (e.g., Nintendo Switch)"
+                  value={customGoalName}
+                  onChange={e => setCustomGoalName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
+                  required
+                />
+                <textarea
+                  placeholder="Description (e.g., I want to save up for a Nintendo Switch)"
+                  value={customGoalDescription}
+                  onChange={e => setCustomGoalDescription(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
+                  rows={3}
+                  required
+                />
+                <input
+                  type="url"
+                  placeholder="Amazon or product link (optional)"
+                  value={customGoalUrl}
+                  onChange={e => setCustomGoalUrl(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
+                  pattern="https?://.*"
+                />
+                <button
+                  type="submit"
+                  className="btn-primary w-full"
+                  disabled={submittingCustomGoal}
+                >
+                  {submittingCustomGoal ? 'Submitting...' : 'Submit Goal for Approval'}
+                </button>
+              </form>
             </div>
           </div>
         </div>
