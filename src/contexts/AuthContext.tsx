@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
@@ -23,7 +23,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userType, setUserType] = useState<'student' | 'admin' | null>(null)
   const [loading, setLoading] = useState(true)
-  const isRefreshingRef = useRef(false)
 
   // Check user type (admin first, then student)
   const checkUserType = async (userId: string) => {
@@ -78,12 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Handle session change and role restoration
   const handleSessionChange = async (session: Session | null) => {
-    // Skip session restoration if we're in the middle of a refresh signout
-    if (isRefreshingRef.current) {
-      console.log('⏭️ Skipping session restoration during refresh signout')
-      return
-    }
-    
     console.log('🔄 Session change detected:', session ? 'User logged in' : 'User logged out')
     const currentUser = session?.user ?? null
     console.log('👤 Current user:', currentUser?.id || 'None')
@@ -102,24 +95,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Single useEffect for session restoration and auth state changes
   useEffect(() => {
     let mounted = true
-    const restoreSession = async () => {
+    const initializeAuth = async () => {
       setLoading(true)
-      // Make refresh behave like signout - clear session and sign out from Supabase
-      console.log('🔄 Page refreshed - signing out user')
-      console.log('🚨 emergencySignOut()')
-      isRefreshingRef.current = true
-      setUser(null)
-      setUserType(null)
-      await supabase.auth.signOut()
-      isRefreshingRef.current = false
-      setLoading(false)
+      
+      // Get initial session
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('❌ Error getting initial session:', error)
+        setLoading(false)
+        return
+      }
+      
+      if (mounted) {
+        await handleSessionChange(session)
+      }
     }
-    restoreSession()
+    
+    initializeAuth()
+    
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (mounted) {
         await handleSessionChange(session)
       }
     })
+    
     return () => {
       mounted = false
       listener.subscription.unsubscribe()
@@ -153,16 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     console.log('🎭 userType changed to:', userType)
-    const emergencySignOut = typeof window !== 'undefined' ? (window as any).emergencySignOut : undefined;
-    if (
-      userType === null &&
-      user !== null &&
-      typeof emergencySignOut === 'function'
-    ) {
-      console.warn('🚨 userType is null while user is set, triggering emergencySignOut')
-      emergencySignOut()
-    }
-  }, [userType, user])
+  }, [userType])
 
   return (
     <AuthContext.Provider value={{
