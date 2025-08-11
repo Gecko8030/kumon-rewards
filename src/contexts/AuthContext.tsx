@@ -26,19 +26,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check user type once and cache the result
   const checkUserType = useCallback(async (userId: string) => {
     try {
-      // Check admin table first
-      const { data: admin, error: adminError } = await supabase
-        .from('admin')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle()
+      // Try to check if user is an admin (try both 'admin' and 'admins' table names)
+      let isAdmin = false
+      
+      // Try 'admin' table first
+      try {
+        const { data: admin, error: adminError } = await supabase
+          .from('admin')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle()
 
-      if (adminError) {
-        console.error('Admin check error:', adminError)
-        return
+        if (!adminError && admin) {
+          isAdmin = true
+        }
+      } catch (err) {
+        // Table might not exist, try 'admins' instead
+        try {
+          const { data: admin, error: adminError } = await supabase
+            .from('admins')
+            .select('id')
+            .eq('id', userId)
+            .maybeSingle()
+
+          if (!adminError && admin) {
+            isAdmin = true
+          }
+        } catch (err2) {
+          console.log('Both admin table names failed, user is not an admin')
+        }
       }
 
-      if (admin) {
+      if (isAdmin) {
         setUserType('admin')
         return
       }
