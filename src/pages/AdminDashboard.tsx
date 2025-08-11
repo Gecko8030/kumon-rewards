@@ -139,8 +139,8 @@ export default function AdminDashboard() {
         
         const fetchPromise = supabase
           .from('students')
-          .select('*')
-          .order('name')
+          .select('id, email, kumon_dollars, level, created_at')
+          .order('email', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
 
@@ -149,7 +149,13 @@ export default function AdminDashboard() {
       })
 
       console.log('AdminDashboard: Students fetched successfully:', data?.length)
-      setStudents(data)
+      setStudents(data.map((student: any) => ({
+        id: student.id,
+        name: student.name || `${student.email}`, // Fallback to email if name doesn't exist
+        email: student.email,
+        level: student.level || 'Level A',
+        kumon_dollars: student.kumon_dollars || 0
+      })))
     } catch (error) {
       console.error('Failed to load students:', error)
       const errorMessage = isNetworkError(error) 
@@ -175,16 +181,19 @@ export default function AdminDashboard() {
             id,
             status,
             created_at,
+            goal_url,
             students (
-              name,
-              email
+              id,
+              email,
+              kumon_dollars
             ),
             rewards (
+              id,
               name,
               cost,
-              image_url
-            ),
-            goal_url
+              image_url,
+              amazon_link
+            )
           `)
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
@@ -200,9 +209,16 @@ export default function AdminDashboard() {
         id: goal.id,
         status: goal.status,
         created_at: goal.created_at,
-        student: goal.students as any,
-        reward: goal.rewards as any,
-        goal_url: goal.goal_url // Add goal_url to the mapped object
+        student: {
+          name: goal.students?.name || goal.students?.email || 'Unknown Student',
+          email: goal.students?.email || 'No email'
+        },
+        reward: {
+          name: goal.rewards?.name || 'Unknown Reward',
+          cost: goal.rewards?.cost || 0,
+          image_url: goal.rewards?.image_url || null
+        },
+        goal_url: goal.goal_url
       })))
     } catch (error) {
       console.error('Failed to load pending goals:', error)
@@ -225,8 +241,8 @@ export default function AdminDashboard() {
         
         const fetchPromise = supabase
           .from('rewards')
-          .select('*')
-          .order('name')
+          .select('id, name, description, cost, image_url, category, available, amazon_link, created_at')
+          .order('name', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
 
@@ -235,7 +251,16 @@ export default function AdminDashboard() {
       })
 
       console.log('AdminDashboard: Rewards fetched successfully:', data?.length)
-      setRewards(data)
+      setRewards(data.map((reward: any) => ({
+        id: reward.id,
+        name: reward.name || 'Unknown Reward',
+        description: reward.description || '',
+        cost: reward.cost || 0,
+        image_url: reward.image_url || null,
+        category: reward.category || 'toys',
+        available: reward.available !== false,
+        amazon_link: reward.amazon_link || null
+      })))
     } catch (error) {
       console.error('Failed to load rewards:', error)
       const errorMessage = isNetworkError(error) 

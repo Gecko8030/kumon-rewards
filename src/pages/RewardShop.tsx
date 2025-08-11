@@ -78,7 +78,7 @@ export default function RewardShop() {
       const data = await withRetry(async () => {
         const { data, error } = await supabase
           .from('rewards')
-          .select('*')
+          .select('id, name, description, cost, image_url, category, available, amazon_link')
           .eq('available', true)
           .order('cost', { ascending: true })
 
@@ -90,7 +90,16 @@ export default function RewardShop() {
       })
 
       console.log('Rewards fetched successfully:', data?.length)
-      setRewards(data)
+      setRewards(data.map((reward: any) => ({
+        id: reward.id,
+        name: reward.name || 'Unknown Reward',
+        description: reward.description || '',
+        cost: reward.cost || 0,
+        image_url: reward.image_url || null,
+        category: reward.category || 'toys',
+        available: reward.available !== false,
+        amazon_link: reward.amazon_link || null
+      })))
     } catch (error) {
       console.error('Failed to load rewards:', error)
       const errorMessage = isNetworkError(error) 

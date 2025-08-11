@@ -105,7 +105,8 @@ export default function GoalTracker() {
               name,
               description,
               cost,
-              image_url
+              image_url,
+              amazon_link
             )
           `)
           .eq('student_id', user.id)
@@ -123,11 +124,19 @@ export default function GoalTracker() {
 
       if (data) {
         console.log('Current goal fetched successfully:', data)
+        const rewardData = data.rewards as any
         setCurrentGoal({
           id: data.id,
           status: data.status,
           created_at: data.created_at,
-          reward: data.rewards as any,
+          reward: {
+            id: rewardData?.id || '',
+            name: rewardData?.name || 'Unknown Reward',
+            description: rewardData?.description || '',
+            cost: rewardData?.cost || 0,
+            image_url: rewardData?.image_url || null,
+            amazon_link: rewardData?.amazon_link || null
+          },
           goal_url: data.goal_url || null
         })
       } else {
