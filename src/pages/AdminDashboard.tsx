@@ -44,6 +44,7 @@ export default function AdminDashboard() {
   const { user, userType } = useAuth()
   const [activeTab, setActiveTab] = useState('students')
   const [students, setStudents] = useState<Student[]>([])
+  const [localStudents, setLocalStudents] = useState<Student[]>([]) // For students not yet in database
   const [pendingGoals, setPendingGoals] = useState<Goal[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
   const [loading, setLoading] = useState(true)
@@ -166,6 +167,11 @@ export default function AdminDashboard() {
     }
   }
 
+  // Get all students (database + local)
+  const getAllStudents = () => {
+    return [...students, ...localStudents]
+  }
+
   const fetchPendingGoals = async () => {
     console.log('AdminDashboard: Fetching pending goals...')
     try {
@@ -285,31 +291,45 @@ export default function AdminDashboard() {
         return
       }
       
-      // Update student balance with retry
-      await withRetry(async () => {
-        const { error: updateError } = await supabase.rpc('add_kumon_dollars', {
-          student_id: selectedStudent,
-          amount: amount
-        })
-
-        if (updateError) throw updateError
-      })
-
-      // Add transaction record with retry
-      await withRetry(async () => {
-        const { error: transactionError } = await supabase
-          .from('transactions')
-          .insert({
+      // Check if this is a local student or database student
+      const isLocalStudent = selectedStudent.startsWith('local_')
+      
+      if (isLocalStudent) {
+        // Update local student balance
+        setLocalStudents(prev => prev.map(student => 
+          student.id === selectedStudent 
+            ? { ...student, kumon_dollars: student.kumon_dollars + amount }
+            : student
+        ))
+        
+        toast.success('Kumon Dollars added to local student! Note: This will be saved to database when student signs up.')
+      } else {
+        // Update database student balance with retry
+        await withRetry(async () => {
+          const { error: updateError } = await supabase.rpc('add_kumon_dollars', {
             student_id: selectedStudent,
-            amount: amount,
-            type: 'earned',
-            description: description
+            amount: amount
           })
 
-        if (transactionError) throw transactionError
-      })
+          if (updateError) throw updateError
+        })
 
-      toast.success('Kumon Dollars added successfully!')
+        // Add transaction record with retry
+        await withRetry(async () => {
+          const { error: transactionError } = await supabase
+            .from('transactions')
+            .insert({
+              student_id: selectedStudent,
+              amount: amount,
+              type: 'earned',
+              description: description
+            })
+
+          if (transactionError) throw transactionError
+        })
+        
+        toast.success('Kumon Dollars added successfully!')
+      }
       setSelectedStudent('')
       setDollarAmount('')
       setDescription('')
@@ -526,34 +546,24 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // Create the student record in the database immediately
-      // We'll use a temporary UUID that the student can link to during signup
-      const tempId = crypto.randomUUID()
-      
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
-        .insert({
-          id: tempId, // Temporary ID that will be updated during signup
-          email: email,
-          name: `${newStudent.firstName} ${newStudent.lastName}`,
-          level: 'Level A',
-          kumon_dollars: 0
-        })
-        .select()
-
-      if (studentError) {
-        console.error('Student record creation error:', studentError)
-        throw studentError
+      // Add student to local state immediately so admin can see and manage them
+      const newLocalStudent: Student = {
+        id: `local_${Date.now()}`, // Temporary local ID
+        name: `${newStudent.firstName} ${newStudent.lastName}`,
+        email: email,
+        level: 'Level A',
+        kumon_dollars: 0
       }
-
-      console.log('Student record created successfully:', studentData)
+      
+      setLocalStudents(prev => [...prev, newLocalStudent])
+      
+      console.log('Student added to local state:', newLocalStudent)
       
       // Show success message
       toast.success('Student created successfully! They can now sign up with their email and password.')
       
       // Store the student info temporarily for signup process
       const studentInfo = {
-        tempId: tempId,
         email: email,
         password: newStudent.password,
         name: `${newStudent.firstName} ${newStudent.lastName}`,
@@ -822,7 +832,7 @@ export default function AdminDashboard() {
                       required
                     >
                       <option value="">Select Student</option>
-                      {students.map(student => (
+                      {getAllStudents().map(student => (
                         <option key={student.id} value={student.id}>
                           {student.name}
                         </option>
@@ -939,19 +949,57 @@ export default function AdminDashboard() {
                 {/* Students List */}
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 mb-4">Student List</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {students.map(student => (
-                      <div key={student.id} className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="font-bold text-gray-900">{student.name}</h4>
-                        <p className="text-sm text-gray-600">{student.email}</p>
-                        <p className="text-sm text-gray-600">Level: {student.level}</p>
-                        <div className="flex items-center space-x-2 mt-2">
-                          <span className="text-lg">💰</span>
-                          <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
-                        </div>
+                  
+                  {/* Database Students */}
+                  {students.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-lg font-semibold text-gray-700 mb-3">Active Students</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {students.map(student => (
+                          <div key={student.id} className="bg-gray-50 rounded-lg p-4">
+                            <h4 className="font-bold text-gray-900">{student.name}</h4>
+                            <p className="text-sm text-gray-600">{student.email}</p>
+                            <p className="text-sm text-gray-600">Level: {student.level}</p>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <span className="text-lg">💰</span>
+                              <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+                  
+                  {/* Local Students (Pending Signup) */}
+                  {localStudents.length > 0 && (
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-700 mb-3">Pending Signup</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {localStudents.map(student => (
+                          <div key={student.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-bold text-gray-900">{student.name}</h4>
+                              <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Pending</span>
+                            </div>
+                            <p className="text-sm text-gray-600">{student.email}</p>
+                            <p className="text-sm text-gray-600">Level: {student.level}</p>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <span className="text-lg">💰</span>
+                              <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
+                            </div>
+                            <p className="text-xs text-yellow-600 mt-2">Student needs to complete signup</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {students.length === 0 && localStudents.length === 0 && (
+                    <div className="text-center py-8">
+                      <Users className="mx-auto text-gray-400 mb-4" size={48} />
+                      <p className="text-gray-500">No students found</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
