@@ -526,26 +526,13 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // Create the student record in the database
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
-        .insert({
-          email: email,
-          name: `${newStudent.firstName} ${newStudent.lastName}`,
-          level: 'Level A',
-          kumon_dollars: 0
-        })
-        .select()
-
-      if (studentError) {
-        console.error('Student record creation error:', studentError)
-        throw studentError
-      }
-
-      console.log('Student record created successfully:', studentData)
+      // For now, we'll store the student info temporarily
+      // The student will be created during signup when we have their auth.uid()
+      
+      console.log('Student information prepared for signup')
       
       // Show success message with instructions
-      toast.success('Student created successfully! The student can now sign up with their email and password.')
+      toast.success('Student information prepared! The student can now sign up with their email and password.')
       
       // Show a modal or alert with the student's login information
       const studentInfo = {
@@ -559,7 +546,7 @@ export default function AdminDashboard() {
       localStorage.setItem('tempStudentInfo', JSON.stringify(studentInfo))
       
       // Show the student info to the admin
-      alert(`Student created successfully!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nIMPORTANT: The student needs to complete their signup on the login page first.\n\nAfter they sign up, their account will be linked to the student record.`)
+      alert(`Student information prepared!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nIMPORTANT: The student needs to complete their signup on the login page first.\n\nAfter they sign up, their student record will be created and they will appear in your students list for dollar management.`)
 
       // Reset form
       setShowAddStudent(false)
@@ -570,8 +557,7 @@ export default function AdminDashboard() {
         password: ''
       })
 
-      // Refresh students list to show the newly created student
-      await fetchStudents()
+      // Note: Students list will be refreshed after the student completes signup
     } catch (error) {
       console.error('Failed to prepare student:', error)
       
