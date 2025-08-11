@@ -153,7 +153,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     console.log('🎭 userType changed to:', userType)
-  }, [userType])
+    const emergencySignOut = typeof window !== 'undefined' ? (window as any).emergencySignOut : undefined;
+    if (
+      userType === null &&
+      user !== null &&
+      typeof emergencySignOut === 'function'
+    ) {
+      console.warn('🚨 userType is null while user is set, triggering emergencySignOut')
+      emergencySignOut()
+    }
+  }, [userType, user])
 
   return (
     <AuthContext.Provider value={{

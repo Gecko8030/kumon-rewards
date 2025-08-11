@@ -64,6 +64,12 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchData()
+    
+    // Debug: Check if environment variables are loaded
+    console.log('Environment check:', {
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? 'loaded' : 'missing',
+      supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'loaded' : 'missing'
+    })
   }, [])
 
   // Add a timeout to prevent infinite loading
@@ -366,6 +372,12 @@ export default function AdminDashboard() {
     setSavingReward(true)
     
     try {
+      // Check connection first
+      const isConnected = await checkConnection()
+      if (!isConnected) {
+        throw new Error('No database connection available')
+      }
+
       const rewardData = {
         name: newReward.name.trim(),
         description: newReward.description.trim(),
@@ -375,24 +387,36 @@ export default function AdminDashboard() {
         available: true
       }
 
-      if (editingReward) {
-        await withRetry(async () => {
-          const { error } = await supabase
-            .from('rewards')
-            .update(rewardData)
-            .eq('id', editingReward.id)
+      console.log('Saving reward data:', rewardData)
 
-          if (error) throw error
-        })
+      if (editingReward) {
+        console.log('Updating existing reward:', editingReward.id)
+        const { data, error } = await supabase
+          .from('rewards')
+          .update(rewardData)
+          .eq('id', editingReward.id)
+          .select()
+
+        if (error) {
+          console.error('Supabase update error:', error)
+          throw error
+        }
+        
+        console.log('Reward updated successfully:', data)
         toast.success('Reward updated!')
       } else {
-        await withRetry(async () => {
-          const { error } = await supabase
-            .from('rewards')
-            .insert(rewardData)
+        console.log('Creating new reward')
+        const { data, error } = await supabase
+          .from('rewards')
+          .insert(rewardData)
+          .select()
 
-          if (error) throw error
-        })
+        if (error) {
+          console.error('Supabase insert error:', error)
+          throw error
+        }
+        
+        console.log('Reward created successfully:', data)
         toast.success('Reward added!')
       }
 
@@ -407,18 +431,27 @@ export default function AdminDashboard() {
         category: 'toys'
       })
 
-      // Refresh rewards list with retry
-      try {
-        await fetchRewards()
-      } catch (error) {
-        console.error('Failed to refresh rewards after save:', error)
-        // Don't show error to user since the save was successful
-      }
+      // Refresh rewards list
+      await fetchRewards()
     } catch (error) {
       console.error('Failed to save reward:', error)
-      const errorMessage = isNetworkError(error) 
-        ? 'Network error - please try again' 
-        : 'Failed to save reward'
+      
+      let errorMessage = 'Failed to save reward'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error - please check your connection and try again'
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Request timed out - please try again'
+        } else if (error.message.includes('JWT') || error.message.includes('auth')) {
+          errorMessage = 'Authentication error - please log in again'
+        } else if (error.message.includes('database')) {
+          errorMessage = 'Database connection error - please try again'
+        } else {
+          errorMessage = `Error: ${error.message}`
+        }
+      }
+      
       toast.error(errorMessage)
     } finally {
       setSavingReward(false)
@@ -466,6 +499,32 @@ export default function AdminDashboard() {
       category: reward.category
     })
     setShowAddReward(true)
+  }
+
+  const testSupabaseConnection = async () => {
+    try {
+      console.log('Testing Supabase connection...')
+      
+      // Test basic query
+      const { data, error } = await supabase
+        .from('rewards')
+        .select('count')
+        .limit(1)
+      
+      if (error) {
+        console.error('Supabase test error:', error)
+        toast.error(`Connection test failed: ${error.message}`)
+        return false
+      }
+      
+      console.log('Supabase test successful:', data)
+      toast.success('Supabase connection working!')
+      return true
+    } catch (error) {
+      console.error('Supabase test exception:', error)
+      toast.error(`Connection test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      return false
+    }
   }
 
   if (loading) {
@@ -531,20 +590,31 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div></div> {/* Spacer */}
             <h1 className="text-4xl font-bold text-white">👨‍🏫 Admin Dashboard</h1>
-            <button
-              onClick={() => {
-                setRefreshing(true)
-                setError(null)
-                fetchData().finally(() => setRefreshing(false))
-              }}
-              disabled={refreshing}
-              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
-            >
-              <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={async () => {
+                  console.log('Testing connection...')
+                  await testSupabaseConnection()
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                Test Connection
+              </button>
+              <button
+                onClick={() => {
+                  setRefreshing(true)
+                  setError(null)
+                  fetchData().finally(() => setRefreshing(false))
+                }}
+                disabled={refreshing}
+                className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
+              >
+                <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+              </button>
+            </div>
           </div>
           <p className="text-xl text-white">Manage students, rewards, and goals</p>
         </div>

@@ -167,6 +167,7 @@ export default function StudentDashboard() {
       console.error('Error fetching goal:', error)
       // Don't set error state for goals as they're optional
     }
+
   }
 
   const fetchRecentTransactions = async () => {
@@ -397,3 +398,4 @@ export default function StudentDashboard() {
     </div>
   )
 }
+
