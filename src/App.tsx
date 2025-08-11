@@ -5,7 +5,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
-import SessionMonitor from './components/SessionMonitor'
+
 import Home from './pages/Home'
 import Login from './pages/Login'
 import StudentDashboard from './pages/StudentDashboard'
@@ -14,23 +14,12 @@ import GoalTracker from './pages/GoalTracker'
 import AdminDashboard from './pages/AdminDashboard'
 
 function App() {
-  // Add refresh user type function
-  React.useEffect(() => {
-    // Add refresh user type function
-    (window as any).refreshUserType = () => {
-      console.log('Manual user type refresh triggered')
-      // This will be set by the AuthProvider
-    }
-    
-    return () => {
-      delete (window as any).refreshUserType
-    }
-  }, [])
+
 
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <SessionMonitor />
+
         <Router>
           <Layout>
             <Routes>
