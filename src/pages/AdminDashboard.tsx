@@ -63,8 +63,7 @@ export default function AdminDashboard() {
     firstName: '',
     lastName: '',
     studentId: '',
-    password: '',
-    email: ''
+    password: ''
   })
   const [newReward, setNewReward] = useState({
     name: '',
@@ -497,16 +496,8 @@ export default function AdminDashboard() {
     
     // Validate form data
     if (!newStudent.firstName.trim() || !newStudent.lastName.trim() || 
-        !newStudent.studentId.trim() || !newStudent.password.trim() || 
-        !newStudent.email.trim()) {
+        !newStudent.studentId.trim() || !newStudent.password.trim()) {
       toast.error('Please fill in all required fields')
-      return
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(newStudent.email)) {
-      toast.error('Please enter a valid email address')
       return
     }
 
@@ -521,9 +512,12 @@ export default function AdminDashboard() {
     try {
       console.log('Creating new student:', newStudent)
 
+      // Generate email from student ID
+      const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
+
       // First, create the user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: newStudent.email,
+        email: email,
         password: newStudent.password,
         email_confirm: true
       })
@@ -544,7 +538,7 @@ export default function AdminDashboard() {
         .from('students')
         .insert({
           id: authData.user.id,
-          email: newStudent.email,
+          email: email,
           name: `${newStudent.firstName} ${newStudent.lastName}`,
           level: 'Level A',
           kumon_dollars: 0
@@ -571,8 +565,7 @@ export default function AdminDashboard() {
         firstName: '',
         lastName: '',
         studentId: '',
-        password: '',
-        email: ''
+        password: ''
       })
 
       // Refresh students list
@@ -896,16 +889,6 @@ export default function AdminDashboard() {
                           required
                         />
                         <input
-                          type="email"
-                          placeholder="Email Address"
-                          value={newStudent.email}
-                          onChange={(e) => setNewStudent({...newStudent, email: e.target.value})}
-                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                          required
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input
                           type="password"
                           placeholder="Password (min 6 characters)"
                           value={newStudent.password}
@@ -914,7 +897,6 @@ export default function AdminDashboard() {
                           required
                           minLength={6}
                         />
-                        <div></div> {/* Spacer */}
                       </div>
                       <div className="flex space-x-4">
                         <button 
@@ -936,8 +918,7 @@ export default function AdminDashboard() {
                               firstName: '',
                               lastName: '',
                               studentId: '',
-                              password: '',
-                              email: ''
+                              password: ''
                             })
                           }}
                           className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
