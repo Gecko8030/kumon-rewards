@@ -43,7 +43,11 @@ export default function AdminDashboard() {
   const { user, userType } = useAuth()
   const [activeTab, setActiveTab] = useState('students')
   const [students, setStudents] = useState<Student[]>([])
-  const [localStudents, setLocalStudents] = useState<Student[]>([]) // For students not yet in database
+  const [localStudents, setLocalStudents] = useState<Student[]>(() => {
+    // Load local students from localStorage on component mount
+    const saved = localStorage.getItem('localStudents')
+    return saved ? JSON.parse(saved) : []
+  }) // For students not yet in database
   const [pendingGoals, setPendingGoals] = useState<Goal[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
   const [loading, setLoading] = useState(true)
@@ -170,6 +174,11 @@ export default function AdminDashboard() {
     return [...students, ...localStudents]
   }
 
+  // Save local students to localStorage whenever they change
+  const saveLocalStudentsToStorage = (newLocalStudents: Student[]) => {
+    localStorage.setItem('localStudents', JSON.stringify(newLocalStudents))
+  }
+
   const fetchPendingGoals = async () => {
     console.log('AdminDashboard: Fetching pending goals...')
     try {
@@ -289,45 +298,31 @@ export default function AdminDashboard() {
         return
       }
       
-      // Check if this is a local student or database student
-      const isLocalStudent = selectedStudent.startsWith('local_')
-      
-      if (isLocalStudent) {
-        // Update local student balance
-        setLocalStudents(prev => prev.map(student => 
-          student.id === selectedStudent 
-            ? { ...student, kumon_dollars: student.kumon_dollars + amount }
-            : student
-        ))
-        
-        toast.success('Kumon Dollars added to local student! Note: This will be saved to database when student signs up.')
-      } else {
-        // Update database student balance with retry
-        await withRetry(async () => {
-          const { error: updateError } = await supabase.rpc('add_kumon_dollars', {
+      // Update database student balance with retry
+      await withRetry(async () => {
+        const { error: updateError } = await supabase.rpc('add_kumon_dollars', {
+          student_id: selectedStudent,
+          amount: amount
+        })
+
+        if (updateError) throw updateError
+      })
+
+      // Add transaction record with retry
+      await withRetry(async () => {
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .insert({
             student_id: selectedStudent,
-            amount: amount
+            amount: amount,
+            type: 'earned',
+            description: description
           })
 
-          if (updateError) throw updateError
-        })
-
-        // Add transaction record with retry
-        await withRetry(async () => {
-          const { error: transactionError } = await supabase
-            .from('transactions')
-            .insert({
-              student_id: selectedStudent,
-              amount: amount,
-              type: 'earned',
-              description: description
-            })
-
-          if (transactionError) throw transactionError
-        })
-        
-        toast.success('Kumon Dollars added successfully!')
-      }
+        if (transactionError) throw transactionError
+      })
+      
+      toast.success('Kumon Dollars added successfully!')
       setSelectedStudent('')
       setDollarAmount('')
       setDescription('')
@@ -544,17 +539,38 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // Add student to local state immediately so admin can see and manage them
-      const newLocalStudent: Student = {
-        id: `local_${Date.now()}`, // Temporary local ID
-        name: `${newStudent.firstName} ${newStudent.lastName}`,
-        email: email,
-        kumon_dollars: 0
+      // Insert student directly into database
+      const { data, error } = await supabase
+        .from('students')
+        .insert({
+          name: `${newStudent.firstName} ${newStudent.lastName}`,
+          email: email,
+          kumon_dollars: 0
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error inserting student:', error)
+        toast.error('Failed to add student to database')
+        return
+      }
+
+      // Add to local state for immediate display
+      const newStudentRecord: Student = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        kumon_dollars: data.kumon_dollars
       }
       
-      setLocalStudents(prev => [...prev, newLocalStudent])
+      setLocalStudents(prev => {
+        const newList = [...prev, newStudentRecord]
+        saveLocalStudentsToStorage(newList)
+        return newList
+      })
       
-      console.log('Student added to local state:', newLocalStudent)
+      console.log('Student added to database:', newStudentRecord)
       
       // Show success message
       toast.success('Student created successfully! They can now sign up with their email and password.')
@@ -655,18 +671,39 @@ export default function AdminDashboard() {
     setShowAddReward(true)
   }
 
-  const removeStudent = (studentId: string) => {
+  const removeStudent = async (studentId: string) => {
     if (!confirm('Are you sure you want to remove this student?')) return
 
-    // Check if it's a local student or database student
-    if (studentId.startsWith('local_')) {
-      // Remove from local students
-      setLocalStudents(prev => prev.filter(student => student.id !== studentId))
-      toast.success('Student removed successfully!')
-    } else {
-      // Remove from database students
-      setStudents(prev => prev.filter(student => student.id !== studentId))
-      toast.success('Student removed successfully!')
+    try {
+      // Check if it's a local student or database student
+      if (studentId.startsWith('local_')) {
+        // Remove from local students
+        setLocalStudents(prev => {
+          const newList = prev.filter(student => student.id !== studentId)
+          saveLocalStudentsToStorage(newList)
+          return newList
+        })
+        toast.success('Student removed successfully!')
+      } else {
+        // Remove from database
+        const { error } = await supabase
+          .from('students')
+          .delete()
+          .eq('id', studentId)
+
+        if (error) {
+          console.error('Error deleting student:', error)
+          toast.error('Failed to remove student from database')
+          return
+        }
+
+        // Remove from local state
+        setStudents(prev => prev.filter(student => student.id !== studentId))
+        toast.success('Student removed successfully!')
+      }
+    } catch (error) {
+      console.error('Error removing student:', error)
+      toast.error('Failed to remove student')
     }
   }
 
@@ -990,10 +1027,10 @@ export default function AdminDashboard() {
                     </div>
                   )}
                   
-                  {/* Local Students (Pending Signup) */}
+                  {/* Students Pending Signup */}
                   {localStudents.length > 0 && (
                     <div>
-                      <h4 className="text-lg font-semibold text-gray-700 mb-3">Pending Signup</h4>
+                      <h4 className="text-lg font-semibold text-gray-700 mb-3">Students Pending Signup</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {localStudents.map(student => (
                           <div key={student.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -1015,7 +1052,7 @@ export default function AdminDashboard() {
                                 Remove
                               </button>
                             </div>
-                            <p className="text-xs text-yellow-600 mt-2">Student needs to complete signup</p>
+                            <p className="text-xs text-yellow-600 mt-2">Student needs to complete signup to access their account</p>
                           </div>
                         ))}
                       </div>
