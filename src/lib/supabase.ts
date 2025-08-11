@@ -69,7 +69,8 @@ export type Database = {
         Row: {
           id: string
           name: string
-          description: string
+          description: string | null
+          amazon_link: string | null
           cost: number
           image_url: string | null
           category: string
@@ -79,7 +80,8 @@ export type Database = {
         Insert: {
           id?: string
           name: string
-          description: string
+          description?: string | null
+          amazon_link?: string | null
           cost: number
           image_url?: string | null
           category: string
@@ -89,7 +91,8 @@ export type Database = {
         Update: {
           id?: string
           name?: string
-          description?: string
+          description?: string | null
+          amazon_link?: string | null
           cost?: number
           image_url?: string | null
           category?: string

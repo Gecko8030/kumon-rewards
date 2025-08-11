@@ -32,7 +32,8 @@ interface Goal {
 interface Reward {
   id: string
   name: string
-  description: string
+  description?: string
+  amazon_link?: string
   cost: number
   image_url: string | null
   category: string
@@ -51,14 +52,23 @@ export default function AdminDashboard() {
   const [editingReward, setEditingReward] = useState<Reward | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [savingReward, setSavingReward] = useState(false)
+  const [showAddStudent, setShowAddStudent] = useState(false)
+  const [savingStudent, setSavingStudent] = useState(false)
 
   // Form states
   const [selectedStudent, setSelectedStudent] = useState('')
   const [dollarAmount, setDollarAmount] = useState('')
   const [description, setDescription] = useState('')
+  const [newStudent, setNewStudent] = useState({
+    firstName: '',
+    lastName: '',
+    studentId: '',
+    password: '',
+    email: ''
+  })
   const [newReward, setNewReward] = useState({
     name: '',
-    description: '',
+    amazon_link: '',
     cost: '',
     image_url: '',
     category: 'toys'
@@ -360,7 +370,7 @@ export default function AdminDashboard() {
     if (savingReward) return // Prevent multiple submissions
     
     // Validate form data
-    if (!newReward.name.trim() || !newReward.description.trim() || !newReward.cost) {
+    if (!newReward.name.trim() || !newReward.amazon_link.trim() || !newReward.cost) {
       toast.error('Please fill in all required fields')
       return
     }
@@ -394,7 +404,7 @@ export default function AdminDashboard() {
 
       const rewardData = {
         name: newReward.name.trim(),
-        description: newReward.description.trim(),
+        amazon_link: newReward.amazon_link.trim(),
         cost: cost,
         image_url: newReward.image_url.trim() || null,
         category: newReward.category,
@@ -445,7 +455,7 @@ export default function AdminDashboard() {
       setEditingReward(null)
       setNewReward({
         name: '',
-        description: '',
+        amazon_link: '',
         cost: '',
         image_url: '',
         category: 'toys'
@@ -477,6 +487,122 @@ export default function AdminDashboard() {
       toast.error(errorMessage)
     } finally {
       setSavingReward(false)
+    }
+  }
+
+  const saveStudent = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (savingStudent) return // Prevent multiple submissions
+    
+    // Validate form data
+    if (!newStudent.firstName.trim() || !newStudent.lastName.trim() || 
+        !newStudent.studentId.trim() || !newStudent.password.trim() || 
+        !newStudent.email.trim()) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newStudent.email)) {
+      toast.error('Please enter a valid email address')
+      return
+    }
+
+    // Validate password length
+    if (newStudent.password.length < 6) {
+      toast.error('Password must be at least 6 characters long')
+      return
+    }
+    
+    setSavingStudent(true)
+    
+    try {
+      console.log('Creating new student:', newStudent)
+
+      // First, create the user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newStudent.email,
+        password: newStudent.password,
+        email_confirm: true
+      })
+
+      if (authError) {
+        console.error('Auth user creation error:', authError)
+        throw authError
+      }
+
+      if (!authData.user) {
+        throw new Error('Failed to create user in authentication system')
+      }
+
+      console.log('Auth user created successfully:', authData.user.id)
+
+      // Then, create the student record in the database
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .insert({
+          id: authData.user.id,
+          email: newStudent.email,
+          name: `${newStudent.firstName} ${newStudent.lastName}`,
+          level: 'Level A',
+          kumon_dollars: 0
+        })
+        .select()
+
+      if (studentError) {
+        console.error('Student record creation error:', studentError)
+        // Try to clean up the auth user if student creation fails
+        try {
+          await supabase.auth.admin.deleteUser(authData.user.id)
+        } catch (cleanupError) {
+          console.error('Failed to cleanup auth user:', cleanupError)
+        }
+        throw studentError
+      }
+
+      console.log('Student created successfully:', studentData)
+      toast.success('Student added successfully!')
+
+      // Reset form
+      setShowAddStudent(false)
+      setNewStudent({
+        firstName: '',
+        lastName: '',
+        studentId: '',
+        password: '',
+        email: ''
+      })
+
+      // Refresh students list
+      await fetchStudents()
+    } catch (error) {
+      console.error('Failed to save student:', error)
+      
+      let errorMessage = 'Failed to save student'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error - please check your connection and try again'
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Request timed out - please try again'
+        } else if (error.message.includes('JWT') || error.message.includes('auth')) {
+          errorMessage = 'Authentication error - please log in again'
+        } else if (error.message.includes('database')) {
+          errorMessage = 'Database connection error - please try again'
+        } else if (error.message.includes('permission') || error.message.includes('policy')) {
+          errorMessage = 'Permission denied - please check your admin access'
+        } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
+          errorMessage = 'A user with this email already exists'
+        } else {
+          errorMessage = `Error: ${error.message}`
+        }
+      }
+      
+      toast.error(errorMessage)
+    } finally {
+      setSavingStudent(false)
     }
   }
 
@@ -515,7 +641,7 @@ export default function AdminDashboard() {
     setEditingReward(reward)
     setNewReward({
       name: reward.name,
-      description: reward.description,
+      amazon_link: reward.amazon_link || '',
       cost: reward.cost.toString(),
       image_url: reward.image_url || '',
       category: reward.category
@@ -725,6 +851,104 @@ export default function AdminDashboard() {
                   </form>
                 </div>
 
+                {/* Add Student Section */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-green-800 flex items-center">
+                      <Users className="mr-2" size={24} />
+                      Add New Student
+                    </h3>
+                    <button
+                      onClick={() => setShowAddStudent(!showAddStudent)}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+                    >
+                      {showAddStudent ? 'Cancel' : 'Add Student'}
+                    </button>
+                  </div>
+                  
+                  {showAddStudent && (
+                    <form onSubmit={saveStudent} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input
+                          type="text"
+                          placeholder="First Name"
+                          value={newStudent.firstName}
+                          onChange={(e) => setNewStudent({...newStudent, firstName: e.target.value})}
+                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          required
+                        />
+                        <input
+                          type="text"
+                          placeholder="Last Name"
+                          value={newStudent.lastName}
+                          onChange={(e) => setNewStudent({...newStudent, lastName: e.target.value})}
+                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input
+                          type="text"
+                          placeholder="Student ID"
+                          value={newStudent.studentId}
+                          onChange={(e) => setNewStudent({...newStudent, studentId: e.target.value})}
+                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          required
+                        />
+                        <input
+                          type="email"
+                          placeholder="Email Address"
+                          value={newStudent.email}
+                          onChange={(e) => setNewStudent({...newStudent, email: e.target.value})}
+                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input
+                          type="password"
+                          placeholder="Password (min 6 characters)"
+                          value={newStudent.password}
+                          onChange={(e) => setNewStudent({...newStudent, password: e.target.value})}
+                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          required
+                          minLength={6}
+                        />
+                        <div></div> {/* Spacer */}
+                      </div>
+                      <div className="flex space-x-4">
+                        <button 
+                          type="submit" 
+                          disabled={savingStudent}
+                          className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                        >
+                          {savingStudent && (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          )}
+                          <span>{savingStudent ? 'Adding Student...' : 'Add Student'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingStudent}
+                          onClick={() => {
+                            setShowAddStudent(false)
+                            setNewStudent({
+                              firstName: '',
+                              lastName: '',
+                              studentId: '',
+                              password: '',
+                              email: ''
+                            })
+                          }}
+                          className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
                 {/* Students List */}
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 mb-4">Student List</h3>
@@ -851,6 +1075,16 @@ export default function AdminDashboard() {
                           required
                         />
                         <input
+                          type="text"
+                          placeholder="Amazon Product Link"
+                          value={newReward.amazon_link}
+                          onChange={(e) => setNewReward({...newReward, amazon_link: e.target.value})}
+                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input
                           type="number"
                           placeholder="Cost (Kumon Dollars)"
                           value={newReward.cost}
@@ -858,16 +1092,6 @@ export default function AdminDashboard() {
                           className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
                           required
                         />
-                      </div>
-                      <textarea
-                        placeholder="Description"
-                        value={newReward.description}
-                        onChange={(e) => setNewReward({...newReward, description: e.target.value})}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-kumon-blue focus:border-transparent"
-                        rows={3}
-                        required
-                      />
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input
                           type="text"
                           name="image_url"
@@ -875,6 +1099,8 @@ export default function AdminDashboard() {
                           value={newReward.image_url}
                           onChange={(e) => setNewReward({...newReward, image_url: e.target.value})}
                         />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <select
                           value={newReward.category}
                           onChange={(e) => setNewReward({...newReward, category: e.target.value})}
@@ -906,7 +1132,7 @@ export default function AdminDashboard() {
                             setEditingReward(null)
                             setNewReward({
                               name: '',
-                              description: '',
+                              amazon_link: '',
                               cost: '',
                               image_url: '',
                               category: 'toys'
