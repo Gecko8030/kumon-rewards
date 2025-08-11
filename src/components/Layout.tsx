@@ -10,7 +10,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, userType, loading, signOut, refreshUserType } = useAuth()
+  const { user, userType, loading, signOut } = useAuth()
   const navigate = useNavigate()
 
   const handleSignOut = async () => {
@@ -114,19 +114,10 @@ export default function Layout({ children }: LayoutProps) {
                   )}
 
                   {userType === 'admin' && (
-                    <>
-                      <Link to="/admin" className="flex items-center space-x-1 text-gray-700 hover:text-kumon-blue transition-colors">
-                        <Settings size={20} />
-                        <span>Admin</span>
-                      </Link>
-                      <button
-                        onClick={refreshUserType}
-                        className="flex items-center space-x-1 text-gray-500 hover:text-gray-700 transition-colors text-xs"
-                        title="Refresh permissions"
-                      >
-                        🔄
-                      </button>
-                    </>
+                    <Link to="/admin" className="flex items-center space-x-1 text-gray-700 hover:text-kumon-blue transition-colors">
+                      <Settings size={20} />
+                      <span>Admin</span>
+                    </Link>
                   )}
 
                   <button 

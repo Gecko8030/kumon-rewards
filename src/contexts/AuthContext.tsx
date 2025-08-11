@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
@@ -23,9 +23,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userType, setUserType] = useState<'student' | 'admin' | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Use refs to prevent unnecessary re-renders and track state
+  const userTypeCheckInProgress = useRef(false)
+  const lastUserTypeCheck = useRef<number>(0)
+  const authListenerSet = useRef(false)
 
-  // Check user type (admin first, then student)
-  const checkUserType = async (userId: string) => {
+  // Check user type (admin first, then student) - with debouncing
+  const checkUserType = useCallback(async (userId: string) => {
+    // Prevent multiple simultaneous checks
+    if (userTypeCheckInProgress.current) {
+      console.log('🔍 User type check already in progress, skipping...')
+      return
+    }
+    
+    // Debounce checks - only allow one check every 30 seconds
+    const now = Date.now()
+    if (now - lastUserTypeCheck.current < 30000) {
+      console.log('🔍 User type check debounced (last check was', Math.round((now - lastUserTypeCheck.current) / 1000), 'seconds ago)')
+      return
+    }
+    
+    userTypeCheckInProgress.current = true
+    lastUserTypeCheck.current = now
+    
     console.log('🔍 Checking user type for:', userId)
     
     // Add timeout to prevent hanging
@@ -85,11 +106,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('❌ User type check error:', err)
       // Clear userType on exceptions to force re-authentication
       setUserType(null)
+    } finally {
+      userTypeCheckInProgress.current = false
     }
-  }
+  }, [])
 
   // Handle session change and role restoration
-  const handleSessionChange = async (session: Session | null) => {
+  const handleSessionChange = useCallback(async (session: Session | null) => {
     console.log('🔄 Session change detected:', session ? 'User logged in' : 'User logged out')
     const currentUser = session?.user ?? null
     console.log('👤 Current user:', currentUser?.id || 'None')
@@ -103,11 +126,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserType(null)
     }
     setLoading(false)
-  }
+  }, [checkUserType])
 
   // Single useEffect for session restoration and auth state changes
   useEffect(() => {
     let mounted = true
+    
+    // Prevent multiple listeners
+    if (authListenerSet.current) {
+      console.log('⚠️ Auth listener already set, skipping...')
+      return
+    }
+    
+    authListenerSet.current = true
+    
     const initializeAuth = async () => {
       setLoading(true)
       
@@ -155,9 +187,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     return () => {
       mounted = false
+      authListenerSet.current = false
       listener.subscription.unsubscribe()
     }
-  }, [])
+  }, [handleSessionChange])
 
   // Auto-sign out if user exists but userType is null after loading
   useEffect(() => {
@@ -184,6 +217,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserType(null)
       setLoading(false)
       
+      // Reset refs
+      userTypeCheckInProgress.current = false
+      lastUserTypeCheck.current = 0
+      
       // Then sign out from Supabase
       const { error } = await supabase.auth.signOut()
       if (error) {
@@ -200,18 +237,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const refreshUserType = async () => {
+  const refreshUserType = useCallback(async () => {
     if (user) {
+      // Force a fresh check by resetting the debounce timer
+      lastUserTypeCheck.current = 0
       await checkUserType(user.id)
     }
-  }
+  }, [user, checkUserType])
 
   useEffect(() => {
     (window as any).refreshUserType = refreshUserType
     return () => {
       delete (window as any).refreshUserType
     }
-  }, [user])
+  }, [refreshUserType])
 
   useEffect(() => {
     console.log('🎭 userType changed to:', userType)

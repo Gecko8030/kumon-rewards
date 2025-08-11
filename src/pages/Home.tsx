@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Star, Gift, Trophy, Target } from 'lucide-react'
+import { Star, Gift, Trophy, Target, LineChart } from 'lucide-react'
 
 export default function Home() {
   const { user, userType } = useAuth()
@@ -141,3 +141,4 @@ export default function Home() {
     </div>
   )
 }
+
