@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { withRetry, isNetworkError, checkConnection } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import { Users, DollarSign, Target, Package, Plus, Check, X, Edit, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -39,6 +40,7 @@ interface Reward {
 }
 
 export default function AdminDashboard() {
+  const { user, userType } = useAuth()
   const [activeTab, setActiveTab] = useState('students')
   const [students, setStudents] = useState<Student[]>([])
   const [pendingGoals, setPendingGoals] = useState<Goal[]>([])
@@ -378,6 +380,20 @@ export default function AdminDashboard() {
         throw new Error('No database connection available')
       }
 
+      // Debug: Check current user and admin status
+      console.log('Current user:', user?.id)
+      console.log('User type:', userType)
+      
+      // Check if user is in admin table
+      const { data: adminCheck, error: adminError } = await supabase
+        .from('admin')
+        .select('id')
+        .eq('id', user?.id)
+        .single()
+      
+      console.log('Admin check result:', adminCheck)
+      console.log('Admin check error:', adminError)
+
       const rewardData = {
         name: newReward.name.trim(),
         description: newReward.description.trim(),
@@ -413,6 +429,12 @@ export default function AdminDashboard() {
 
         if (error) {
           console.error('Supabase insert error:', error)
+          console.error('Error details:', {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          })
           throw error
         }
         
