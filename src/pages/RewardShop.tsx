@@ -9,6 +9,7 @@ interface Reward {
   id: string
   name: string
   description: string
+  amazon_link?: string
   cost: number
   image_url: string | null
   category: string
@@ -292,23 +293,41 @@ export default function RewardShop() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredRewards.map((reward) => (
               <div key={reward.id} className="bg-white rounded-2xl card-shadow overflow-hidden transform hover:scale-105 transition-all duration-300">
-                <div className="aspect-w-1 aspect-h-1">
-                  {reward.image_url ? (
-                    <img
-                      src={reward.image_url}
-                      alt={reward.name}
-                      className="w-full h-48 object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
-                      <span className="text-gray-500">No Image</span>
-                    </div>
-                  )}
+                {/* Clickable image and title area */}
+                <div 
+                  className="cursor-pointer"
+                  onClick={() => {
+                    if (reward.amazon_link) {
+                      window.open(reward.amazon_link, '_blank', 'noopener,noreferrer')
+                    }
+                  }}
+                >
+                  <div className="aspect-w-1 aspect-h-1">
+                    {reward.image_url ? (
+                      <img
+                        src={reward.image_url}
+                        alt={reward.name}
+                        className="w-full h-48 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
+                        <span className="text-gray-500">No Image</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-6 pb-2">
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 hover:text-kumon-blue transition-colors">
+                      {reward.name}
+                      {reward.amazon_link && (
+                        <span className="ml-2 text-sm text-blue-600">🔗</span>
+                      )}
+                    </h3>
+                    <p className="text-gray-600 mb-4 text-sm">{reward.description}</p>
+                  </div>
                 </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{reward.name}</h3>
-                  <p className="text-gray-600 mb-4 text-sm">{reward.description}</p>
 
+                {/* Non-clickable action area */}
+                <div className="px-6 pb-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-1">
                       <span className="text-2xl">💰</span>
@@ -331,7 +350,10 @@ export default function RewardShop() {
                         />
                       </div>
                       <button
-                        onClick={() => setAsGoal(reward.id)}
+                        onClick={(e) => {
+                          e.stopPropagation() // Prevent triggering the card click
+                          setAsGoal(reward.id)
+                        }}
                         className="w-full btn-primary flex items-center justify-center space-x-2"
                       >
                         <Target size={16} />

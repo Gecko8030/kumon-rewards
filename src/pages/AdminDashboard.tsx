@@ -1132,15 +1132,29 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {rewards.map(reward => (
                     <div key={reward.id} className="bg-gray-50 rounded-lg p-4">
-                      {reward.image_url && (
-                        <img
-                          src={reward.image_url}
-                          alt={reward.name}
-                          className="w-full h-32 object-cover rounded-lg mb-3"
-                        />
-                      )}
-                      <h4 className="font-bold text-gray-900">{reward.name}</h4>
-                      <p className="text-sm text-gray-600 mb-2">{reward.description}</p>
+                      <div 
+                        className="cursor-pointer"
+                        onClick={() => {
+                          if (reward.amazon_link) {
+                            window.open(reward.amazon_link, '_blank', 'noopener,noreferrer')
+                          }
+                        }}
+                      >
+                        {reward.image_url && (
+                          <img
+                            src={reward.image_url}
+                            alt={reward.name}
+                            className="w-full h-32 object-cover rounded-lg mb-3 hover:opacity-90 transition-opacity"
+                          />
+                        )}
+                        <h4 className="font-bold text-gray-900 hover:text-kumon-blue transition-colors">
+                          {reward.name}
+                          {reward.amazon_link && (
+                            <span className="ml-2 text-sm text-blue-600">🔗</span>
+                          )}
+                        </h4>
+                        <p className="text-sm text-gray-600 mb-2">{reward.description}</p>
+                      </div>
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-1">
                           <span className="text-lg">💰</span>
@@ -1152,14 +1166,20 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => startEditReward(reward)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            startEditReward(reward)
+                          }}
                           className="flex-1 flex items-center justify-center space-x-1 bg-kumon-blue text-white px-3 py-2 rounded hover:bg-blue-600 transition-colors"
                         >
                           <Edit size={14} />
                           <span>Edit</span>
                         </button>
                         <button
-                          onClick={() => deleteReward(reward.id)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteReward(reward.id)
+                          }}
                           className="flex-1 flex items-center justify-center space-x-1 bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 transition-colors"
                         >
                           <Trash2 size={14} />

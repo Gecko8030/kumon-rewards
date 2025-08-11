@@ -13,6 +13,7 @@ interface Goal {
     id: string
     name: string
     description: string
+    amazon_link?: string
     cost: number
     image_url: string | null
   }
@@ -356,21 +357,40 @@ export default function GoalTracker() {
 
         <div className="bg-white rounded-2xl card-shadow p-8 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            <div>
+            <div 
+              className="cursor-pointer"
+              onClick={() => {
+                if (currentGoal.reward.amazon_link) {
+                  window.open(currentGoal.reward.amazon_link, '_blank', 'noopener,noreferrer')
+                }
+              }}
+            >
               {currentGoal.reward.image_url ? (
                 <img
                   src={currentGoal.reward.image_url}
                   alt={currentGoal.reward.name}
-                  className="w-full h-64 object-cover rounded-lg"
+                  className="w-full h-64 object-cover rounded-lg hover:opacity-90 transition-opacity"
                 />
               ) : (
-                <div className="w-full h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+                <div className="w-full h-64 bg-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-300 transition-colors">
                   <span className="text-gray-500 text-lg">No Image Available</span>
                 </div>
               )}
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">{currentGoal.reward.name}</h2>
+              <h2 
+                className="text-3xl font-bold text-gray-900 mb-4 hover:text-kumon-blue transition-colors cursor-pointer"
+                onClick={() => {
+                  if (currentGoal.reward.amazon_link) {
+                    window.open(currentGoal.reward.amazon_link, '_blank', 'noopener,noreferrer')
+                  }
+                }}
+              >
+                {currentGoal.reward.name}
+                {currentGoal.reward.amazon_link && (
+                  <span className="ml-2 text-sm text-blue-600">🔗</span>
+                )}
+              </h2>
               <p className="text-lg text-gray-600 mb-6">{currentGoal.reward.description}</p>
               <div className="flex items-center space-x-2 mb-4">
                 <span className="text-3xl">💰</span>
