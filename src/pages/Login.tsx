@@ -58,22 +58,17 @@ export default function Login() {
         }
 
         if (data.user) {
-          // Create the student record in the database with the auth user ID
+          // Update the existing student record to link it to the auth user
           const studentInfo = JSON.parse(localStorage.getItem('tempStudentInfo') || '{}')
-          const { error: insertError } = await supabase
+          const { error: updateError } = await supabase
             .from('students')
-            .insert({
-              id: data.user.id, // Use the auth user ID as the student ID
-              email: email,
-              name: studentInfo.name || 'Student',
-              level: 'Level A',
-              kumon_dollars: 0
-            })
+            .update({ id: data.user.id }) // Link the existing record to the auth user
+            .eq('id', studentInfo.tempId) // Update the record with the temporary ID
 
-          if (insertError) {
-            console.error('Error creating student record:', insertError)
+          if (updateError) {
+            console.error('Error linking student record to auth user:', updateError)
             // Don't throw here as the user is already created
-            showToast.error('Account created but there was an issue with your profile. Please contact an administrator.')
+            showToast.error('Account created but there was an issue linking your profile. Please contact an administrator.')
           } else {
             showToast.success('Account created successfully! You can now sign in.')
           }

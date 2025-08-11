@@ -139,7 +139,7 @@ export default function AdminDashboard() {
         
         const fetchPromise = supabase
           .from('students')
-          .select('id, email, kumon_dollars, level, created_at')
+          .select('id, email, name, kumon_dollars, level, created_at')
           .order('email', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
@@ -526,27 +526,44 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // For now, we'll store the student info temporarily
-      // The student will be created during signup when we have their auth.uid()
+      // Create the student record in the database immediately
+      // We'll use a temporary UUID that the student can link to during signup
+      const tempId = crypto.randomUUID()
       
-      console.log('Student information prepared for signup')
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .insert({
+          id: tempId, // Temporary ID that will be updated during signup
+          email: email,
+          name: `${newStudent.firstName} ${newStudent.lastName}`,
+          level: 'Level A',
+          kumon_dollars: 0
+        })
+        .select()
+
+      if (studentError) {
+        console.error('Student record creation error:', studentError)
+        throw studentError
+      }
+
+      console.log('Student record created successfully:', studentData)
       
-      // Show success message with instructions
-      toast.success('Student information prepared! The student can now sign up with their email and password.')
+      // Show success message
+      toast.success('Student created successfully! They can now sign up with their email and password.')
       
-      // Show a modal or alert with the student's login information
+      // Store the student info temporarily for signup process
       const studentInfo = {
+        tempId: tempId,
         email: email,
         password: newStudent.password,
         name: `${newStudent.firstName} ${newStudent.lastName}`,
         studentId: newStudent.studentId
       }
       
-      // Store the student info temporarily so they can sign up
       localStorage.setItem('tempStudentInfo', JSON.stringify(studentInfo))
       
       // Show the student info to the admin
-      alert(`Student information prepared!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nIMPORTANT: The student needs to complete their signup on the login page first.\n\nAfter they sign up, their student record will be created and they will appear in your students list for dollar management.`)
+      alert(`Student created successfully!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nIMPORTANT: The student needs to complete their signup on the login page first.\n\nAfter they sign up, their account will be properly linked to the student record.`)
 
       // Reset form
       setShowAddStudent(false)
@@ -557,7 +574,8 @@ export default function AdminDashboard() {
         password: ''
       })
 
-      // Note: Students list will be refreshed after the student completes signup
+      // Refresh students list to show the newly created student
+      await fetchStudents()
     } catch (error) {
       console.error('Failed to prepare student:', error)
       
