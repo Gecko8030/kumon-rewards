@@ -66,7 +66,6 @@ export default function Login() {
               id: data.user.id, // Use the auth user ID as the student ID
               email: email,
               name: studentInfo.name || 'Student',
-              level: 'Level A',
               kumon_dollars: 0
             })
 

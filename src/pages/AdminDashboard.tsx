@@ -9,7 +9,6 @@ interface Student {
   id: string
   name: string
   email: string
-  level: string
   kumon_dollars: number
 }
 
@@ -140,7 +139,7 @@ export default function AdminDashboard() {
         
         const fetchPromise = supabase
           .from('students')
-          .select('id, email, name, kumon_dollars, level, created_at')
+          .select('id, email, name, kumon_dollars, created_at')
           .order('email', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
@@ -154,7 +153,6 @@ export default function AdminDashboard() {
         id: student.id,
         name: student.name || `${student.email}`, // Fallback to email if name doesn't exist
         email: student.email,
-        level: student.level || 'Level A',
         kumon_dollars: student.kumon_dollars || 0
       })))
     } catch (error) {
@@ -551,7 +549,6 @@ export default function AdminDashboard() {
         id: `local_${Date.now()}`, // Temporary local ID
         name: `${newStudent.firstName} ${newStudent.lastName}`,
         email: email,
-        level: 'Level A',
         kumon_dollars: 0
       }
       
@@ -656,6 +653,21 @@ export default function AdminDashboard() {
       category: reward.category
     })
     setShowAddReward(true)
+  }
+
+  const removeStudent = (studentId: string) => {
+    if (!confirm('Are you sure you want to remove this student?')) return
+
+    // Check if it's a local student or database student
+    if (studentId.startsWith('local_')) {
+      // Remove from local students
+      setLocalStudents(prev => prev.filter(student => student.id !== studentId))
+      toast.success('Student removed successfully!')
+    } else {
+      // Remove from database students
+      setStudents(prev => prev.filter(student => student.id !== studentId))
+      toast.success('Student removed successfully!')
+    }
   }
 
   const testSupabaseConnection = async () => {
@@ -959,10 +971,18 @@ export default function AdminDashboard() {
                           <div key={student.id} className="bg-gray-50 rounded-lg p-4">
                             <h4 className="font-bold text-gray-900">{student.name}</h4>
                             <p className="text-sm text-gray-600">{student.email}</p>
-                            <p className="text-sm text-gray-600">Level: {student.level}</p>
-                            <div className="flex items-center space-x-2 mt-2">
-                              <span className="text-lg">💰</span>
-                              <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
+                            <div className="flex items-center justify-between mt-2">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-lg">💰</span>
+                                <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
+                              </div>
+                              <button
+                                onClick={() => removeStudent(student.id)}
+                                className="text-red-500 hover:text-red-700 text-sm font-medium"
+                                title="Remove student"
+                              >
+                                Remove
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -982,10 +1002,18 @@ export default function AdminDashboard() {
                               <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Pending</span>
                             </div>
                             <p className="text-sm text-gray-600">{student.email}</p>
-                            <p className="text-sm text-gray-600">Level: {student.level}</p>
-                            <div className="flex items-center space-x-2 mt-2">
-                              <span className="text-lg">💰</span>
-                              <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
+                            <div className="flex items-center justify-between mt-2">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-lg">💰</span>
+                                <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
+                              </div>
+                              <button
+                                onClick={() => removeStudent(student.id)}
+                                className="text-red-500 hover:text-red-700 text-sm font-medium"
+                                title="Remove student"
+                              >
+                                Remove
+                              </button>
                             </div>
                             <p className="text-xs text-yellow-600 mt-2">Student needs to complete signup</p>
                           </div>
