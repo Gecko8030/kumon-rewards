@@ -38,7 +38,14 @@ export default function Layout({ children }: LayoutProps) {
       <div className="min-h-screen gradient-bg flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-white text-lg">Loading...</p>
+          <p className="text-white text-lg mb-4">Loading...</p>
+          <p className="text-white text-sm opacity-75 mb-6">Checking your authentication status</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            Refresh Page
+          </button>
         </div>
       </div>
     )

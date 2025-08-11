@@ -27,50 +27,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check user type (admin first, then student)
   const checkUserType = async (userId: string) => {
     console.log('🔍 Checking user type for:', userId)
+    
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('User type check timeout')), 8000) // 8 second timeout
+    })
+    
     try {
-      // Check admin table first
-      const { data: admin, error: adminError } = await supabase
-        .from('admin')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle()
+      const checkPromise = async () => {
+        // Check admin table first
+        const { data: admin, error: adminError } = await supabase
+          .from('admin')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle()
 
-      if (adminError) {
-        console.error('❌ Admin check error:', adminError)
-        // Clear userType on network errors to force re-authentication
+        if (adminError) {
+          console.error('❌ Admin check error:', adminError)
+          // Clear userType on network errors to force re-authentication
+          setUserType(null)
+          return
+        }
+
+        if (admin) {
+          console.log('✅ User is admin')
+          setUserType('admin')
+          return
+        }
+
+        // Check students table
+        const { data: student, error: studentError } = await supabase
+          .from('students')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle()
+
+        if (studentError) {
+          console.error('❌ Student check error:', studentError)
+          // Clear userType on network errors to force re-authentication
+          setUserType(null)
+          return
+        }
+
+        if (student) {
+          console.log('✅ User is student')
+          setUserType('student')
+          return
+        }
+
+        // User not found in either table - clear everything
+        console.log('❌ User not found in admin or student tables, clearing userType')
         setUserType(null)
-        return
       }
-
-      if (admin) {
-        console.log('✅ User is admin')
-        setUserType('admin')
-        return
-      }
-
-      // Check students table
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle()
-
-      if (studentError) {
-        console.error('❌ Student check error:', studentError)
-        // Clear userType on network errors to force re-authentication
-        setUserType(null)
-        return
-      }
-
-      if (student) {
-        console.log('✅ User is student')
-        setUserType('student')
-        return
-      }
-
-      // User not found in either table - clear everything
-      console.log('❌ User not found in admin or student tables, clearing userType')
-      setUserType(null)
+      
+      await Promise.race([checkPromise(), timeoutPromise])
     } catch (err) {
       console.error('❌ User type check error:', err)
       // Clear userType on exceptions to force re-authentication
@@ -101,6 +111,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       setLoading(true)
       
+      // Add a timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        if (mounted) {
+          console.warn('⚠️ Authentication initialization timeout - forcing completion')
+          setLoading(false)
+          // Don't clear user state on timeout, let the auto-sign out handle it
+        }
+      }, 10000) // 10 second timeout
+      
       try {
         // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession()
@@ -109,17 +128,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null)
           setUserType(null)
           setLoading(false)
+          clearTimeout(timeoutId)
           return
         }
         
         if (mounted) {
           await handleSessionChange(session)
+          clearTimeout(timeoutId)
         }
       } catch (error) {
         console.error('❌ Error during auth initialization:', error)
         setUser(null)
         setUserType(null)
         setLoading(false)
+        clearTimeout(timeoutId)
       }
     }
     
@@ -141,7 +163,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading && user && userType === null) {
       console.log('🚨 User exists but userType is null - auto signing out')
-      signOut()
+      // Add a small delay to prevent immediate sign out during initialization
+      const timeoutId = setTimeout(() => {
+        signOut()
+      }, 1000)
+      
+      return () => clearTimeout(timeoutId)
     }
   }, [user, userType, loading])
 
