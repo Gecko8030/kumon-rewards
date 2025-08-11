@@ -17,23 +17,17 @@ export default function Layout({ children }: LayoutProps) {
     try {
       console.log('Layout: Starting sign out process...')
       
-      // Try the normal sign out first
+      // Clear user state first
       await signOut()
-      console.log('Layout: Sign out completed, showing success toast')
+      console.log('Layout: Sign out completed successfully')
       showToast.success('Signed out successfully!')
-      console.log('Layout: Navigating to home page')
       navigate('/')
     } catch (error) {
       console.error('Layout: Sign out error:', error)
       
-      // Fallback: manually clear everything
-      console.log('Layout: Using fallback sign out...')
-      
-      // Clear localStorage manually
+      // Simple fallback - just clear everything and redirect
       localStorage.clear()
       sessionStorage.clear()
-      
-      // Force page reload to clear all state
       window.location.href = '/'
     }
   }

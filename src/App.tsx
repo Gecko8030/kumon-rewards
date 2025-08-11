@@ -14,15 +14,8 @@ import GoalTracker from './pages/GoalTracker'
 import AdminDashboard from './pages/AdminDashboard'
 
 function App() {
-  // Add emergency sign out function to window for debugging
+  // Add refresh user type function
   React.useEffect(() => {
-    (window as any).emergencySignOut = () => {
-      console.log('Emergency sign out triggered')
-      localStorage.clear()
-      sessionStorage.clear()
-      window.location.href = '/'
-    }
-    
     // Add refresh user type function
     (window as any).refreshUserType = () => {
       console.log('Manual user type refresh triggered')
@@ -30,7 +23,6 @@ function App() {
     }
     
     return () => {
-      delete (window as any).emergencySignOut
       delete (window as any).refreshUserType
     }
   }, [])

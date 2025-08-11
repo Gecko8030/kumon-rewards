@@ -33,12 +33,26 @@ export async function withRetry<T>(
       }
 
       // Don't retry on authentication errors
-      if (error instanceof Error && error.message.includes('JWT')) {
+      if (error instanceof Error && (
+        error.message.includes('JWT') ||
+        error.message.includes('auth') ||
+        error.message.includes('unauthorized') ||
+        error.message.includes('401')
+      )) {
         throw lastError
       }
 
       // Don't retry on timeout errors
       if (error instanceof Error && error.message.includes('timed out')) {
+        throw lastError
+      }
+
+      // Don't retry on validation errors
+      if (error instanceof Error && (
+        error.message.includes('validation') ||
+        error.message.includes('constraint') ||
+        error.message.includes('duplicate')
+      )) {
         throw lastError
       }
 
@@ -88,8 +102,15 @@ export function isNetworkError(error: any): boolean {
     errorMessage.includes('timeout') ||
     errorMessage.includes('timed out') ||
     errorMessage.includes('Failed to fetch') ||
+    errorMessage.includes('connection') ||
+    errorMessage.includes('ECONNRESET') ||
+    errorMessage.includes('ENOTFOUND') ||
+    errorMessage.includes('ETIMEDOUT') ||
     errorCode === 'NETWORK_ERROR' ||
     errorCode === 'ECONNRESET' ||
-    errorCode === 'ENOTFOUND'
+    errorCode === 'ENOTFOUND' ||
+    errorCode === 'ETIMEDOUT' ||
+    errorCode === 'ERR_NETWORK' ||
+    errorCode === 'ERR_INTERNET_DISCONNECTED'
   )
 } 

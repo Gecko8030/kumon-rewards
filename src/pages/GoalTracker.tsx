@@ -238,25 +238,36 @@ export default function GoalTracker() {
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
+                  if (!user?.id) {
+                    toast.error('User not authenticated. Please log in again.');
+                    return;
+                  }
                   setSubmittingCustomGoal(true);
                   try {
-                    const { error } = await supabase
-                      .from('goals')
-                      .insert({
-                        student_id: user.id,
-                        reward_id: null,
-                        status: 'pending',
-                        goal_url: customGoalUrl || null,
-                        custom_name: customGoalName
-                      });
-                    if (error) throw error;
+                    await withRetry(async () => {
+                      const { error } = await supabase
+                        .from('goals')
+                        .insert({
+                          student_id: user.id,
+                          reward_id: null,
+                          status: 'pending',
+                          goal_url: customGoalUrl || null,
+                          custom_name: customGoalName
+                        });
+                      if (error) throw error;
+                    });
+                    
                     toast.success('Goal submitted for approval!');
                     setCustomGoalName('');
                     setCustomGoalUrl('');
                     // Refetch goal state
                     await fetchCurrentGoal();
                   } catch (err) {
-                    toast.error('Failed to submit goal');
+                    console.error('Failed to submit custom goal:', err);
+                    const errorMessage = isNetworkError(err) 
+                      ? 'Network error - please check your connection and try again' 
+                      : 'Failed to submit goal. Please try again.';
+                    toast.error(errorMessage);
                   } finally {
                     setSubmittingCustomGoal(false);
                   }

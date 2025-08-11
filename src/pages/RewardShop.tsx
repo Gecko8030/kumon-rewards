@@ -135,38 +135,53 @@ export default function RewardShop() {
 
     try {
       console.log('Setting goal for reward:', rewardId)
-      const { data: existingGoal } = await supabase
-        .from('goals')
-        .select('id')
-        .eq('student_id', user.id)
-        .in('status', ['pending', 'approved'])
-        .single()
+      
+      // Check for existing goals with retry
+      const { data: existingGoal } = await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('goals')
+          .select('id')
+          .eq('student_id', user.id)
+          .in('status', ['pending', 'approved'])
+          .single()
+        
+        if (error && error.code !== 'PGRST116') {
+          throw error
+        }
+        return { data, error }
+      })
 
       if (existingGoal) {
         toast.error('You already have an active goal. Complete it first!')
         return
       }
 
-      const { error } = await supabase
-        .from('goals')
-        .insert({
-          student_id: user.id,
-          reward_id: rewardId,
-          status: 'pending',
-          goal_url: goalUrl || null
-        })
+      // Create new goal with retry
+      await withRetry(async () => {
+        const { error } = await supabase
+          .from('goals')
+          .insert({
+            student_id: user.id,
+            reward_id: rewardId,
+            status: 'pending',
+            goal_url: goalUrl || null
+          })
 
-      if (error) {
-        console.error('Goal creation error:', error)
-        throw error
-      }
+        if (error) {
+          console.error('Goal creation error:', error)
+          throw error
+        }
+      })
       
       setGoalUrl('');
       console.log('Goal set successfully')
       toast.success('Goal set! Waiting for instructor approval.')
     } catch (error) {
       console.error('Failed to set goal:', error)
-      toast.error('Failed to set goal')
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please check your connection and try again' 
+        : 'Failed to set goal. Please try again.';
+      toast.error(errorMessage)
     }
   }
 
