@@ -374,25 +374,23 @@ export default function AdminDashboard() {
     setSavingReward(true)
     
     try {
-      // Check connection first
-      const isConnected = await checkConnection()
-      if (!isConnected) {
-        throw new Error('No database connection available')
-      }
-
       // Debug: Check current user and admin status
       console.log('Current user:', user?.id)
       console.log('User type:', userType)
       
-      // Check if user is in admin table
-      const { data: adminCheck, error: adminError } = await supabase
-        .from('admin')
-        .select('id')
-        .eq('id', user?.id)
-        .single()
-      
-      console.log('Admin check result:', adminCheck)
-      console.log('Admin check error:', adminError)
+      // Check if user is in admin table (but don't block if it fails)
+      try {
+        const { data: adminCheck, error: adminError } = await supabase
+          .from('admin')
+          .select('id')
+          .eq('id', user?.id)
+          .single()
+        
+        console.log('Admin check result:', adminCheck)
+        console.log('Admin check error:', adminError)
+      } catch (adminCheckError) {
+        console.warn('Admin check failed, but continuing:', adminCheckError)
+      }
 
       const rewardData = {
         name: newReward.name.trim(),
@@ -469,6 +467,8 @@ export default function AdminDashboard() {
           errorMessage = 'Authentication error - please log in again'
         } else if (error.message.includes('database')) {
           errorMessage = 'Database connection error - please try again'
+        } else if (error.message.includes('permission') || error.message.includes('policy')) {
+          errorMessage = 'Permission denied - please check your admin access'
         } else {
           errorMessage = `Error: ${error.message}`
         }

@@ -11,7 +11,7 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   options: RetryOptions = {}
 ): Promise<T> {
-  const { maxRetries = 2, delay = 2000, backoff = true, timeout = 15000 } = options
+  const { maxRetries = 2, delay = 2000, backoff = true, timeout = 10000 } = options // Reduced default timeout from 15s to 10s
   let lastError: Error
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -56,6 +56,15 @@ export async function withRetry<T>(
         throw lastError
       }
 
+      // Don't retry on permission errors
+      if (error instanceof Error && (
+        error.message.includes('permission') ||
+        error.message.includes('policy') ||
+        error.message.includes('403')
+      )) {
+        throw lastError
+      }
+
       // Wait before retrying
       const waitTime = backoff ? delay * Math.pow(2, attempt) : delay
       console.log(`Waiting ${waitTime}ms before retry...`)
@@ -71,7 +80,7 @@ export async function checkConnection(): Promise<boolean> {
     console.log('Checking database connection...')
     
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Connection check timeout')), 10000)
+      setTimeout(() => reject(new Error('Connection check timeout')), 5000) // Reduced from 10s to 5s
     })
 
     const checkPromise = supabase.from('students').select('count').limit(1)
