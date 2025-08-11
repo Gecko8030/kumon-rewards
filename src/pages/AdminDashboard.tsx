@@ -540,49 +540,41 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // First, create the user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: email,
-        password: newStudent.password,
-        email_confirm: true
-      })
-
-      if (authError) {
-        console.error('Auth user creation error:', authError)
-        throw authError
-      }
-
-      if (!authData.user) {
-        throw new Error('Failed to create user in authentication system')
-      }
-
-      console.log('Auth user created successfully:', authData.user.id)
-
-      // Then, create the student record in the database
+      // Create the student record in the database first
       const { data: studentData, error: studentError } = await supabase
         .from('students')
         .insert({
-          id: authData.user.id,
           email: email,
           name: `${newStudent.firstName} ${newStudent.lastName}`,
           level: 'Level A',
-          kumon_dollars: 0
+          kumon_dollars: 0,
+          student_id: newStudent.studentId.toLowerCase() // Add student_id field
         })
         .select()
 
       if (studentError) {
         console.error('Student record creation error:', studentError)
-        // Try to clean up the auth user if student creation fails
-        try {
-          await supabase.auth.admin.deleteUser(authData.user.id)
-        } catch (cleanupError) {
-          console.error('Failed to cleanup auth user:', cleanupError)
-        }
         throw studentError
       }
 
-      console.log('Student created successfully:', studentData)
-      toast.success('Student added successfully!')
+      console.log('Student record created successfully:', studentData)
+      
+      // Show success message with instructions
+      toast.success('Student record created! The student can now sign up with their email and password.')
+      
+      // Show a modal or alert with the student's login information
+      const studentInfo = {
+        email: email,
+        password: newStudent.password,
+        name: `${newStudent.firstName} ${newStudent.lastName}`,
+        studentId: newStudent.studentId
+      }
+      
+      // Store the student info temporarily so they can sign up
+      localStorage.setItem('tempStudentInfo', JSON.stringify(studentInfo))
+      
+      // Show the student info to the admin
+      alert(`Student created successfully!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nPlease share this information with the student so they can log in.`)
 
       // Reset form
       setShowAddStudent(false)
