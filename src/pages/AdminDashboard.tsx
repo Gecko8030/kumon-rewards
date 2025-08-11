@@ -143,7 +143,7 @@ export default function AdminDashboard() {
         
         const fetchPromise = supabase
           .from('students')
-          .select('id, email, name, kumon_dollars, created_at')
+          .select('id, email, name, kumon_dollars')
           .order('email', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
@@ -552,7 +552,17 @@ export default function AdminDashboard() {
 
       if (error) {
         console.error('Error inserting student:', error)
-        toast.error('Failed to add student to database')
+        
+        let errorMessage = 'Failed to add student to database'
+        if (error.code === '42501') {
+          errorMessage = 'Permission denied - please check your admin access'
+        } else if (error.code === '23505') {
+          errorMessage = 'A student with this email already exists'
+        } else if (error.message) {
+          errorMessage = `Database error: ${error.message}`
+        }
+        
+        toast.error(errorMessage)
         return
       }
 
@@ -597,8 +607,7 @@ export default function AdminDashboard() {
         password: ''
       })
 
-      // Refresh students list to show the newly created student
-      await fetchStudents()
+      // No need to refresh - student is already in localStudents state
     } catch (error) {
       console.error('Failed to prepare student:', error)
       
