@@ -32,6 +32,36 @@ export default function Layout({ children }: LayoutProps) {
     }
   }
 
+  // Show loading spinner while authentication is being determined
+  if (loading) {
+    return (
+      <div className="min-h-screen gradient-bg flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login prompt if user exists but has no valid userType
+  if (user && userType === null) {
+    return (
+      <div className="min-h-screen gradient-bg flex items-center justify-center">
+        <div className="text-center bg-white rounded-lg p-8 shadow-lg">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
+          <p className="text-gray-600 mb-6">Your session has expired or you don't have proper access.</p>
+          <button 
+            onClick={handleSignOut}
+            className="btn-primary"
+          >
+            Sign In Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen gradient-bg">
       <nav className="bg-white shadow-lg">

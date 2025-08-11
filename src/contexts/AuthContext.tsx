@@ -37,7 +37,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (adminError) {
         console.error('❌ Admin check error:', adminError)
-        // Don't clear userType on network errors, keep previous value
+        // Clear userType on network errors to force re-authentication
+        setUserType(null)
         return
       }
 
@@ -56,7 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (studentError) {
         console.error('❌ Student check error:', studentError)
-        // Don't clear userType on network errors, keep previous value
+        // Clear userType on network errors to force re-authentication
+        setUserType(null)
         return
       }
 
@@ -66,12 +68,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      // Only clear userType if we successfully checked both tables and found no match
+      // User not found in either table - clear everything
       console.log('❌ User not found in admin or student tables, clearing userType')
       setUserType(null)
     } catch (err) {
       console.error('❌ User type check error:', err)
-      // Don't clear userType on exceptions, keep previous value
+      // Clear userType on exceptions to force re-authentication
+      setUserType(null)
     }
   }
 
@@ -98,16 +101,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       setLoading(true)
       
-      // Get initial session
-      const { data: { session }, error } = await supabase.auth.getSession()
-      if (error) {
-        console.error('❌ Error getting initial session:', error)
+      try {
+        // Get initial session
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) {
+          console.error('❌ Error getting initial session:', error)
+          setUser(null)
+          setUserType(null)
+          setLoading(false)
+          return
+        }
+        
+        if (mounted) {
+          await handleSessionChange(session)
+        }
+      } catch (error) {
+        console.error('❌ Error during auth initialization:', error)
+        setUser(null)
+        setUserType(null)
         setLoading(false)
-        return
-      }
-      
-      if (mounted) {
-        await handleSessionChange(session)
       }
     }
     
@@ -124,6 +136,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       listener.subscription.unsubscribe()
     }
   }, [])
+
+  // Auto-sign out if user exists but userType is null after loading
+  useEffect(() => {
+    if (!loading && user && userType === null) {
+      console.log('🚨 User exists but userType is null - auto signing out')
+      signOut()
+    }
+  }, [user, userType, loading])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
