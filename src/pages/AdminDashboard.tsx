@@ -540,27 +540,28 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // Create the student record in the database first
-      const { data: studentData, error: studentError } = await supabase
+      // Check if student with this email already exists
+      const { data: existingStudent, error: checkError } = await supabase
         .from('students')
-        .insert({
-          email: email,
-          name: `${newStudent.firstName} ${newStudent.lastName}`,
-          level: 'Level A',
-          kumon_dollars: 0,
-          student_id: newStudent.studentId.toLowerCase() // Add student_id field
-        })
-        .select()
+        .select('id, email')
+        .eq('email', email)
+        .maybeSingle()
 
-      if (studentError) {
-        console.error('Student record creation error:', studentError)
-        throw studentError
+      if (checkError) {
+        console.error('Error checking for existing student:', checkError)
+        throw checkError
       }
 
-      console.log('Student record created successfully:', studentData)
+      if (existingStudent) {
+        toast.error('A student with this email already exists')
+        return
+      }
+
+      // For now, we'll create a temporary student record that the student can complete later
+      // We'll store the student info in localStorage and show instructions
       
       // Show success message with instructions
-      toast.success('Student record created! The student can now sign up with their email and password.')
+      toast.success('Student information prepared! The student can now sign up with their email and password.')
       
       // Show a modal or alert with the student's login information
       const studentInfo = {
@@ -574,7 +575,7 @@ export default function AdminDashboard() {
       localStorage.setItem('tempStudentInfo', JSON.stringify(studentInfo))
       
       // Show the student info to the admin
-      alert(`Student created successfully!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nPlease share this information with the student so they can log in.`)
+      alert(`Student information prepared!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nIMPORTANT: The student needs to complete their signup on the login page first.\n\nAfter they sign up, you can manually add them to the students table if needed.`)
 
       // Reset form
       setShowAddStudent(false)
@@ -585,12 +586,11 @@ export default function AdminDashboard() {
         password: ''
       })
 
-      // Refresh students list
-      await fetchStudents()
+      // Note: We're not refreshing students list since we haven't actually created a record yet
     } catch (error) {
-      console.error('Failed to save student:', error)
+      console.error('Failed to prepare student:', error)
       
-      let errorMessage = 'Failed to save student'
+      let errorMessage = 'Failed to prepare student information'
       
       if (error instanceof Error) {
         if (error.message.includes('network') || error.message.includes('fetch')) {

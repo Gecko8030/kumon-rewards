@@ -58,21 +58,28 @@ export default function Login() {
         }
 
         if (data.user) {
-          // Update the student record with the auth user ID
-          const { error: updateError } = await supabase
+          // Create the student record in the database
+          const { error: insertError } = await supabase
             .from('students')
-            .update({ id: data.user.id })
-            .eq('email', email)
+            .insert({
+              id: data.user.id, // Link to the auth user
+              email: email,
+              name: JSON.parse(localStorage.getItem('tempStudentInfo') || '{}').name || 'Student',
+              level: 'Level A',
+              kumon_dollars: 0
+            })
 
-          if (updateError) {
-            console.error('Error updating student record:', updateError)
+          if (insertError) {
+            console.error('Error creating student record:', insertError)
             // Don't throw here as the user is already created
+            showToast.error('Account created but there was an issue with your profile. Please contact an administrator.')
+          } else {
+            showToast.success('Account created successfully! You can now sign in.')
           }
 
           // Clear the temp student info
           localStorage.removeItem('tempStudentInfo')
           
-          showToast.success('Account created successfully! You can now sign in.')
           setIsSignup(false)
           setEmail('')
           setPassword('')
