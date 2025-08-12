@@ -43,11 +43,7 @@ export default function AdminDashboard() {
   const { user, userType } = useAuth()
   const [activeTab, setActiveTab] = useState('students')
   const [students, setStudents] = useState<Student[]>([])
-  const [localStudents, setLocalStudents] = useState<Student[]>(() => {
-    // Load local students from localStorage on component mount
-    const saved = localStorage.getItem('localStudents')
-    return saved ? JSON.parse(saved) : []
-  }) // For students not yet in database
+
   const [pendingGoals, setPendingGoals] = useState<Goal[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
   const [loading, setLoading] = useState(true)
@@ -169,14 +165,9 @@ export default function AdminDashboard() {
     }
   }
 
-  // Get all students (database + local)
+  // Get all students from database
   const getAllStudents = () => {
-    return [...students, ...localStudents]
-  }
-
-  // Save local students to localStorage whenever they change
-  const saveLocalStudentsToStorage = (newLocalStudents: Student[]) => {
-    localStorage.setItem('localStudents', JSON.stringify(newLocalStudents))
+    return students
   }
 
   const fetchPendingGoals = async () => {
@@ -566,21 +557,10 @@ export default function AdminDashboard() {
         return
       }
 
-      // Add to local state for immediate display
-      const newStudentRecord: Student = {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        kumon_dollars: data.kumon_dollars
-      }
+      console.log('Student added to database:', data)
       
-      setLocalStudents(prev => {
-        const newList = [...prev, newStudentRecord]
-        saveLocalStudentsToStorage(newList)
-        return newList
-      })
-      
-      console.log('Student added to database:', newStudentRecord)
+      // Refresh the students list to show the new student
+      await fetchStudents()
       
       // Show success message
       toast.success('Student created successfully! They can now sign up with their email and password.')
@@ -683,33 +663,33 @@ export default function AdminDashboard() {
   const removeStudent = async (studentId: string) => {
     if (!confirm('Are you sure you want to remove this student?')) return
 
+    console.log('Attempting to remove student with ID:', studentId)
+
     try {
-      // Check if it's a local student or database student
-      if (studentId.startsWith('local_')) {
-        // Remove from local students
-        setLocalStudents(prev => {
-          const newList = prev.filter(student => student.id !== studentId)
-          saveLocalStudentsToStorage(newList)
-          return newList
-        })
-        toast.success('Student removed successfully!')
-      } else {
-        // Remove from database
-        const { error } = await supabase
-          .from('students')
-          .delete()
-          .eq('id', studentId)
+      console.log('Removing database student')
+      // Remove from database
+      const { data, error } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId)
+        .select()
 
-        if (error) {
-          console.error('Error deleting student:', error)
-          toast.error('Failed to remove student from database')
-          return
-        }
-
-        // Remove from local state
-        setStudents(prev => prev.filter(student => student.id !== studentId))
-        toast.success('Student removed successfully!')
+      if (error) {
+        console.error('Error deleting student from database:', error)
+        toast.error(`Failed to remove student from database: ${error.message}`)
+        return
       }
+
+      console.log('Database delete result:', data)
+
+      // Remove from local state
+      setStudents(prev => {
+        const newList = prev.filter(student => student.id !== studentId)
+        console.log('Database students after removal:', newList)
+        return newList
+      })
+      
+      toast.success('Student removed successfully from database!')
     } catch (error) {
       console.error('Error removing student:', error)
       toast.error('Failed to remove student')
@@ -1036,39 +1016,9 @@ export default function AdminDashboard() {
                     </div>
                   )}
                   
-                  {/* Students Pending Signup */}
-                  {localStudents.length > 0 && (
-                    <div>
-                      <h4 className="text-lg font-semibold text-gray-700 mb-3">Students Pending Signup</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {localStudents.map(student => (
-                          <div key={student.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-bold text-gray-900">{student.name}</h4>
-                              <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Pending</span>
-                            </div>
-                            <p className="text-sm text-gray-600">{student.email}</p>
-                            <div className="flex items-center justify-between mt-2">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-lg">💰</span>
-                                <span className="font-bold text-kumon-orange">{student.kumon_dollars}</span>
-                              </div>
-                              <button
-                                onClick={() => removeStudent(student.id)}
-                                className="text-red-500 hover:text-red-700 text-sm font-medium"
-                                title="Remove student"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                            <p className="text-xs text-yellow-600 mt-2">Student needs to complete signup to access their account</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
                   
-                  {students.length === 0 && localStudents.length === 0 && (
+                  {students.length === 0 && (
                     <div className="text-center py-8">
                       <Users className="mx-auto text-gray-400 mb-4" size={48} />
                       <p className="text-gray-500">No students found</p>
