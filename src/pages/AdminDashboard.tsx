@@ -292,8 +292,8 @@ export default function AdminDashboard() {
       // Update database student balance with retry
       await withRetry(async () => {
         const { error: updateError } = await supabase.rpc('add_kumon_dollars', {
-          student_id: selectedStudent,
-          amount: amount
+          p_amount: amount,
+          p_student_id: selectedStudent
         })
 
         if (updateError) throw updateError
