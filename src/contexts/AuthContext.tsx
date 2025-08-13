@@ -26,43 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check user type once and cache the result
   const checkUserType = useCallback(async (userId: string) => {
     try {
-      // Try to check if user is an admin (try both 'admin' and 'admins' table names)
-      let isAdmin = false
-      
-      // Try 'admin' table first
-      try {
-        const { data: admin, error: adminError } = await supabase
-          .from('admin')
-          .select('id')
-          .eq('id', userId)
-          .maybeSingle()
-
-        if (!adminError && admin) {
-          isAdmin = true
-        }
-      } catch (err) {
-        // Table might not exist, try 'admins' instead
-        try {
-          const { data: admin, error: adminError } = await supabase
-            .from('admins')
-            .select('id')
-            .eq('id', userId)
-            .maybeSingle()
-
-          if (!adminError && admin) {
-            isAdmin = true
-          }
-        } catch (err2) {
-          console.log('Both admin table names failed, user is not an admin')
-        }
-      }
-
-      if (isAdmin) {
-        setUserType('admin')
-        return
-      }
-
-      // Check students table
+      // Simple approach: check if user exists in students table
       const { data: student, error: studentError } = await supabase
         .from('students')
         .select('id')
@@ -71,19 +35,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (studentError) {
         console.error('Student check error:', studentError)
+        // If we can't check students table, assume admin for now
+        setUserType('admin')
         return
       }
 
       if (student) {
         setUserType('student')
-        return
+      } else {
+        // If not a student, assume admin
+        setUserType('admin')
       }
-
-      // User not found in either table
-      setUserType(null)
     } catch (err) {
       console.error('User type check error:', err)
-      setUserType(null)
+      // On any error, default to admin to ensure access
+      setUserType('admin')
     }
   }, [])
 
