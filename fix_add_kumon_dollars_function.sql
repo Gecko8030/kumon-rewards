@@ -6,8 +6,8 @@ DROP FUNCTION IF EXISTS add_kumon_dollars(UUID, INTEGER);
 
 -- Create a cleaner version of the function
 CREATE OR REPLACE FUNCTION add_kumon_dollars(
-    p_amount INTEGER,
-    p_student_id UUID
+    p_student_id UUID,
+    p_amount INTEGER
 )
 RETURNS VOID
 LANGUAGE plpgsql
