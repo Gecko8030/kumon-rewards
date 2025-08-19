@@ -245,7 +245,7 @@ export default function AdminDashboard() {
         
         const fetchPromise = supabase
           .from('rewards')
-          .select('id, name, description, cost, image_url, category, available, amazon_link, created_at')
+          .select('*')
           .order('name', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
@@ -255,6 +255,14 @@ export default function AdminDashboard() {
       })
 
       console.log('AdminDashboard: Rewards fetched successfully:', data?.length)
+      console.log('Raw rewards data:', data)
+      
+      if (!data || data.length === 0) {
+        console.log('No rewards found in database')
+        setRewards([])
+        return
+      }
+      
       setRewards(data.map((reward: any) => ({
         id: reward.id,
         name: reward.name || 'Unknown Reward',
