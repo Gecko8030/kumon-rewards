@@ -246,7 +246,6 @@ export default function AdminDashboard() {
         const fetchPromise = supabase
           .from('rewards')
           .select('*')
-          .order('name', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
 

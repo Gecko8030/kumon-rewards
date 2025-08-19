@@ -80,7 +80,6 @@ export default function RewardShop() {
           .from('rewards')
           .select('id, name, description, cost, image_url, category, available, amazon_link')
           .eq('available', true)
-          .order('cost', { ascending: true })
 
         if (error) {
           console.error('Rewards fetch error:', error)
