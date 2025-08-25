@@ -582,9 +582,6 @@ export default function AdminDashboard() {
       
       localStorage.setItem('tempStudentInfo', JSON.stringify(studentInfo))
       
-      // Show the student info to the admin
-      alert(`Student created successfully!\n\nStudent Information:\nEmail: ${email}\nPassword: ${newStudent.password}\nStudent ID: ${newStudent.studentId}\n\nIMPORTANT: The student needs to complete their signup on the login page first.\n\nAfter they sign up, their account will be properly linked to the student record.`)
-
       // Reset form
       setShowAddStudent(false)
       setNewStudent({
