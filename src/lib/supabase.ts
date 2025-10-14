@@ -128,7 +128,7 @@ export type Database = {
           id: string
           student_id: string
           amount: number
-          type: 'earned' | 'spent'
+          type: 'earned' | 'spent' | 'removed'
           description: string
           created_at: string
         }
@@ -136,7 +136,7 @@ export type Database = {
           id?: string
           student_id: string
           amount: number
-          type: 'earned' | 'spent'
+          type: 'earned' | 'spent' | 'removed'
           description: string
           created_at?: string
         }
@@ -144,7 +144,7 @@ export type Database = {
           id?: string
           student_id?: string
           amount?: number
-          type?: 'earned' | 'spent'
+          type?: 'earned' | 'spent' | 'removed'
           description?: string
           created_at?: string
         }
