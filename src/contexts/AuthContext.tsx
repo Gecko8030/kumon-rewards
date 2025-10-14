@@ -26,30 +26,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check user type once and cache the result
   const checkUserType = useCallback(async (userId: string) => {
     try {
-      // Simple approach: check if user exists in students table
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle()
+      // Check both students and admin tables to determine user type
+      const [studentResult, adminResult] = await Promise.all([
+        supabase
+          .from('students')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle(),
+        supabase
+          .from('admin')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle()
+      ])
+
+      const { data: student, error: studentError } = studentResult
+      const { data: admin, error: adminError } = adminResult
 
       if (studentError) {
         console.error('Student check error:', studentError)
-        // If we can't check students table, assume admin for now
-        setUserType('admin')
-        return
+      }
+      if (adminError) {
+        console.error('Admin check error:', adminError)
       }
 
+      // Determine user type based on which table they exist in
       if (student) {
         setUserType('student')
-      } else {
-        // If not a student, assume admin
+      } else if (admin) {
         setUserType('admin')
+      } else {
+        // User exists in neither table - this shouldn't happen in normal flow
+        console.warn('User not found in students or admin table:', userId)
+        setUserType(null)
       }
     } catch (err) {
       console.error('User type check error:', err)
-      // On any error, default to admin to ensure access
-      setUserType('admin')
+      setUserType(null)
     }
   }, [])
 
