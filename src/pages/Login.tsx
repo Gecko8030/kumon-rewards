@@ -58,23 +58,55 @@ export default function Login() {
         }
 
         if (data.user) {
-          // Create the student record in the database with the auth user ID
+          // Try to find existing student record by email and link it
           const studentInfo = JSON.parse(localStorage.getItem('tempStudentInfo') || '{}')
-          const { error: insertError } = await supabase
+          
+          // First, try to find existing student record
+          const { data: existingStudent, error: findError } = await supabase
             .from('students')
-            .insert({
-              id: data.user.id, // Use the auth user ID as the student ID
-              email: email,
-              name: studentInfo.name || 'Student',
-              kumon_dollars: 0
-            })
+            .select('id, email, name, kumon_dollars')
+            .eq('email', email)
+            .maybeSingle()
 
-          if (insertError) {
-            console.error('Error creating student record:', insertError)
-            // Don't throw here as the user is already created
-            showToast.error('Account created but there was an issue with your profile. Please contact an administrator.')
+          if (findError) {
+            console.error('Error finding student record:', findError)
+          }
+
+          if (existingStudent) {
+            // Update existing student record to link with auth user
+            const { error: updateError } = await supabase
+              .from('students')
+              .update({
+                auth_user_id: data.user.id,
+                signup_completed: true
+              })
+              .eq('id', existingStudent.id)
+
+            if (updateError) {
+              console.error('Error linking student record:', updateError)
+              showToast.error('Account created but there was an issue linking your profile. Please contact an administrator.')
+            } else {
+              showToast.success('Account created successfully! You can now sign in.')
+            }
           } else {
-            showToast.success('Account created successfully! You can now sign in.')
+            // Create new student record if none exists
+            const { error: insertError } = await supabase
+              .from('students')
+              .insert({
+                id: data.user.id, // Use the auth user ID as the student ID
+                email: email,
+                name: studentInfo.name || 'Student',
+                kumon_dollars: 0,
+                auth_user_id: data.user.id,
+                signup_completed: true
+              })
+
+            if (insertError) {
+              console.error('Error creating student record:', insertError)
+              showToast.error('Account created but there was an issue with your profile. Please contact an administrator.')
+            } else {
+              showToast.success('Account created successfully! You can now sign in.')
+            }
           }
 
           // Clear the temp student info

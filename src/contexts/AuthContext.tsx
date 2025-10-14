@@ -30,8 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const [studentResult, adminResult] = await Promise.all([
         supabase
           .from('students')
-          .select('id')
-          .eq('id', userId)
+          .select('id, auth_user_id, signup_completed')
+          .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
           .maybeSingle(),
         supabase
           .from('admin')
@@ -52,7 +52,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Determine user type based on which table they exist in
       if (student) {
-        setUserType('student')
+        // Check if student has completed signup
+        if (student.signup_completed || student.auth_user_id === userId) {
+          setUserType('student')
+        } else {
+          // Student record exists but signup not completed
+          console.warn('Student record exists but signup not completed:', userId)
+          setUserType(null)
+        }
       } else if (admin) {
         setUserType('admin')
       } else {
