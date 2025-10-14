@@ -59,6 +59,11 @@ export default function AdminDashboard() {
   const [selectedStudent, setSelectedStudent] = useState('')
   const [dollarAmount, setDollarAmount] = useState('')
   const [description, setDescription] = useState('')
+  
+  // Remove dollars form states
+  const [selectedStudentRemove, setSelectedStudentRemove] = useState('')
+  const [dollarAmountRemove, setDollarAmountRemove] = useState('')
+  const [descriptionRemove, setDescriptionRemove] = useState('')
   const [newStudent, setNewStudent] = useState({
     firstName: '',
     lastName: '',
@@ -337,6 +342,65 @@ export default function AdminDashboard() {
       const errorMessage = isNetworkError(error) 
         ? 'Network error - please try again' 
         : 'Failed to add Kumon Dollars'
+      toast.error(errorMessage)
+    }
+  }
+
+  const removeKumonDollars = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedStudentRemove || !dollarAmountRemove || !descriptionRemove) {
+      toast.error('Please fill in all fields')
+      return
+    }
+
+    try {
+      const amount = parseInt(dollarAmountRemove)
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Please enter a valid amount (positive number)')
+        return
+      }
+      
+      // Update database student balance with retry
+      await withRetry(async () => {
+        const { error: updateError } = await supabase.rpc('remove_kumon_dollars', {
+          p_student_id: selectedStudentRemove,
+          p_amount: amount
+        })
+
+        if (updateError) throw updateError
+      })
+
+      // Add transaction record with retry
+      await withRetry(async () => {
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .insert({
+            student_id: selectedStudentRemove,
+            amount: amount,
+            type: 'removed',
+            description: descriptionRemove
+          })
+
+        if (transactionError) throw transactionError
+      })
+      
+      toast.success('Kumon Dollars removed successfully!')
+      setSelectedStudentRemove('')
+      setDollarAmountRemove('')
+      setDescriptionRemove('')
+      
+      // Refresh students list with retry
+      try {
+        await fetchStudents()
+      } catch (error) {
+        console.error('Failed to refresh students after removing dollars:', error)
+        // Don't show error to user since the operation was successful
+      }
+    } catch (error) {
+      console.error('Failed to remove Kumon Dollars:', error)
+      const errorMessage = isNetworkError(error) 
+        ? 'Network error - please try again' 
+        : error.message || 'Failed to remove Kumon Dollars'
       toast.error(errorMessage)
     }
   }
@@ -898,6 +962,48 @@ export default function AdminDashboard() {
                     />
                     <button type="submit" className="btn-primary">
                       Add Dollars
+                    </button>
+                  </form>
+                </div>
+
+                {/* Remove Kumon Dollars Form */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                  <h3 className="text-xl font-bold text-red-800 mb-4 flex items-center">
+                    <DollarSign className="mr-2" size={24} />
+                    Remove Kumon Dollars
+                  </h3>
+                  <form onSubmit={removeKumonDollars} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <select
+                      value={selectedStudentRemove}
+                      onChange={(e) => setSelectedStudentRemove(e.target.value)}
+                      className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select Student</option>
+                      {getAllStudents().map(student => (
+                        <option key={student.id} value={student.id}>
+                          {student.name} (${student.kumon_dollars})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      placeholder="Amount to Remove"
+                      value={dollarAmountRemove}
+                      onChange={(e) => setDollarAmountRemove(e.target.value)}
+                      className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      required
+                    />
+                    <input
+                      type="text"
+                      placeholder="Reason (e.g., Correction, Refund)"
+                      value={descriptionRemove}
+                      onChange={(e) => setDescriptionRemove(e.target.value)}
+                      className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      required
+                    />
+                    <button type="submit" className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition-colors">
+                      Remove Dollars
                     </button>
                   </form>
                 </div>
