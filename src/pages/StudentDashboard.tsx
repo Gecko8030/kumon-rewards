@@ -10,6 +10,7 @@ interface Student {
   name: string
   avatar_url: string | null
   kumon_dollars: number
+  grade: string
 }
 
 interface Goal {
@@ -279,8 +280,9 @@ export default function StudentDashboard() {
               )}
             </div>
             <div>
-  <h1 className="text-4xl font-bold text-gray-900 mb-2">Welcome back, {student.name}! 🌟</h1>
-</div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Welcome back, {student.name}! 🌟</h1>
+              <p className="text-lg text-gray-600">{student.grade}</p>
+            </div>
 
           </div>
         </div>

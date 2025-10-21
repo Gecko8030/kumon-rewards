@@ -10,6 +10,7 @@ interface Student {
   name: string
   email: string
   kumon_dollars: number
+  grade: string
 }
 
 interface Goal {
@@ -68,7 +69,8 @@ export default function AdminDashboard() {
     firstName: '',
     lastName: '',
     studentId: '',
-    password: ''
+    password: '',
+    grade: 'Pre-K'
   })
   const [newReward, setNewReward] = useState({
     name: '',
@@ -144,7 +146,7 @@ export default function AdminDashboard() {
         
         const fetchPromise = supabase
           .from('students')
-          .select('id, email, name, kumon_dollars')
+          .select('id, email, name, kumon_dollars, grade')
           .order('email', { ascending: true })
 
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
@@ -158,7 +160,8 @@ export default function AdminDashboard() {
         id: student.id,
         name: student.name || `${student.email}`, // Fallback to email if name doesn't exist
         email: student.email,
-        kumon_dollars: student.kumon_dollars || 0
+        kumon_dollars: student.kumon_dollars || 0,
+        grade: student.grade || 'Grade 1'
       })))
     } catch (error) {
       console.error('Failed to load students:', error)
@@ -582,7 +585,7 @@ export default function AdminDashboard() {
     
     // Validate form data
     if (!newStudent.firstName.trim() || !newStudent.lastName.trim() || 
-        !newStudent.studentId.trim() || !newStudent.password.trim()) {
+        !newStudent.studentId.trim() || !newStudent.password.trim() || !newStudent.grade.trim()) {
       toast.error('Please fill in all required fields')
       return
     }
@@ -601,19 +604,52 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // Insert student directly into database
+      // First, create the auth user
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: email,
+        password: newStudent.password,
+        email_confirm: true, // Auto-confirm the email
+        user_metadata: {
+          name: `${newStudent.firstName} ${newStudent.lastName}`,
+          student_id: newStudent.studentId,
+          grade: newStudent.grade
+        }
+      })
+
+      if (authError) {
+        console.error('Error creating auth user:', authError)
+        
+        let errorMessage = 'Failed to create user account'
+        if (authError.message.includes('already registered')) {
+          errorMessage = 'A user with this email already exists'
+        } else if (authError.message) {
+          errorMessage = `Account creation error: ${authError.message}`
+        }
+        
+        toast.error(errorMessage)
+        return
+      }
+
+      console.log('Auth user created:', authData.user)
+
+      // Insert student into database with the auth user ID
       const { data, error } = await supabase
         .from('students')
         .insert({
+          id: authData.user.id, // Use the auth user ID
           name: `${newStudent.firstName} ${newStudent.lastName}`,
           email: email,
-          kumon_dollars: 0
+          kumon_dollars: 0,
+          grade: newStudent.grade
         })
         .select()
         .single()
 
       if (error) {
         console.error('Error inserting student:', error)
+        
+        // If student creation fails, we should clean up the auth user
+        await supabase.auth.admin.deleteUser(authData.user.id)
         
         let errorMessage = 'Failed to add student to database'
         if (error.code === '42501') {
@@ -634,17 +670,7 @@ export default function AdminDashboard() {
       await fetchStudents()
       
       // Show success message
-      toast.success('Student created successfully! They can now sign up with their email and password.')
-      
-      // Store the student info temporarily for signup process
-      const studentInfo = {
-        email: email,
-        password: newStudent.password,
-        name: `${newStudent.firstName} ${newStudent.lastName}`,
-        studentId: newStudent.studentId
-      }
-      
-      localStorage.setItem('tempStudentInfo', JSON.stringify(studentInfo))
+      toast.success('Student created successfully! They can now sign in with their email and password.')
       
       // Reset form
       setShowAddStudent(false)
@@ -652,14 +678,15 @@ export default function AdminDashboard() {
         firstName: '',
         lastName: '',
         studentId: '',
-        password: ''
+        password: '',
+        grade: 'Pre-K'
       })
 
       // No need to refresh - student is already in localStudents state
     } catch (error) {
-      console.error('Failed to prepare student:', error)
+      console.error('Failed to create student:', error)
       
-      let errorMessage = 'Failed to prepare student information'
+      let errorMessage = 'Failed to create student'
       
       if (error instanceof Error) {
         if (error.message.includes('network') || error.message.includes('fetch')) {
@@ -1062,6 +1089,29 @@ export default function AdminDashboard() {
                           minLength={6}
                         />
                       </div>
+                      <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                        <select
+                          value={newStudent.grade}
+                          onChange={(e) => setNewStudent({...newStudent, grade: e.target.value})}
+                          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          required
+                        >
+                          <option value="Pre-K">Pre-K</option>
+                          <option value="Kindergarten">Kindergarten</option>
+                          <option value="Grade 1">Grade 1</option>
+                          <option value="Grade 2">Grade 2</option>
+                          <option value="Grade 3">Grade 3</option>
+                          <option value="Grade 4">Grade 4</option>
+                          <option value="Grade 5">Grade 5</option>
+                          <option value="Grade 6">Grade 6</option>
+                          <option value="Grade 7">Grade 7</option>
+                          <option value="Grade 8">Grade 8</option>
+                          <option value="Grade 9">Grade 9</option>
+                          <option value="Grade 10">Grade 10</option>
+                          <option value="Grade 11">Grade 11</option>
+                          <option value="Grade 12">Grade 12</option>
+                        </select>
+                      </div>
                       <div className="flex space-x-4">
                         <button 
                           type="submit" 
@@ -1082,7 +1132,8 @@ export default function AdminDashboard() {
                               firstName: '',
                               lastName: '',
                               studentId: '',
-                              password: ''
+                              password: '',
+                              grade: 'Pre-K'
                             })
                           }}
                           className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1107,6 +1158,7 @@ export default function AdminDashboard() {
                           <div key={student.id} className="bg-gray-50 rounded-lg p-4">
                             <h4 className="font-bold text-gray-900">{student.name}</h4>
                             <p className="text-sm text-gray-600">{student.email}</p>
+                            <p className="text-sm text-gray-500">{student.grade}</p>
                             <div className="flex items-center justify-between mt-2">
                               <div className="flex items-center space-x-2">
                                 <span className="text-lg">💰</span>
