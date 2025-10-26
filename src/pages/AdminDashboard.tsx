@@ -653,9 +653,13 @@ export default function AdminDashboard() {
         
         let errorMessage = 'Failed to add student to database'
         if (error.code === '42501') {
-          errorMessage = 'Permission denied - please check your admin access'
+          errorMessage = 'Permission denied - please check your admin access. Run the fix_user_id_invalid_error.sql script in Supabase.'
         } else if (error.code === '23505') {
           errorMessage = 'A student with this email already exists'
+        } else if (error.message.includes('user id invalid') || error.message.includes('invalid user')) {
+          errorMessage = 'User ID validation failed - please run the fix_user_id_invalid_error.sql script in Supabase SQL Editor'
+        } else if (error.message.includes('policy') || error.message.includes('RLS')) {
+          errorMessage = 'Row Level Security policy error - please run the fix_user_id_invalid_error.sql script in Supabase'
         } else if (error.message) {
           errorMessage = `Database error: ${error.message}`
         }
@@ -698,7 +702,9 @@ export default function AdminDashboard() {
         } else if (error.message.includes('database')) {
           errorMessage = 'Database connection error - please try again'
         } else if (error.message.includes('permission') || error.message.includes('policy')) {
-          errorMessage = 'Permission denied - please check your admin access'
+          errorMessage = 'Permission denied - please run the fix_user_id_invalid_error.sql script in Supabase'
+        } else if (error.message.includes('user id invalid') || error.message.includes('invalid user')) {
+          errorMessage = 'User ID validation failed - please run the fix_user_id_invalid_error.sql script in Supabase SQL Editor'
         } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
           errorMessage = 'A user with this email already exists'
         } else {
