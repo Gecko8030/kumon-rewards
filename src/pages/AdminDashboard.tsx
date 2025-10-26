@@ -604,49 +604,22 @@ export default function AdminDashboard() {
       // Generate email from student ID
       const email = `${newStudent.studentId.toLowerCase()}@kumon.local`
 
-      // First, create the auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: email,
-        password: newStudent.password,
-        email_confirm: true, // Auto-confirm the email
-        user_metadata: {
-          name: `${newStudent.firstName} ${newStudent.lastName}`,
-          student_id: newStudent.studentId,
-          grade: newStudent.grade
-        }
-      })
+      // Generate a UUID for the student (we'll create auth account later)
+      const studentId = crypto.randomUUID()
 
-      if (authError) {
-        console.error('Error creating auth user:', authError)
-        
-        let errorMessage = 'Failed to create user account'
-        if (authError.message.includes('already registered')) {
-          errorMessage = 'A user with this email already exists'
-        } else if (authError.message.includes('User not allowed')) {
-          errorMessage = 'User not allowed - please run the fix_user_not_allowed_error.sql script in Supabase SQL Editor'
-        } else if (authError.message.includes('signup disabled')) {
-          errorMessage = 'Signup is disabled - please enable user signup in Supabase Authentication settings'
-        } else if (authError.message.includes('email')) {
-          errorMessage = 'Email validation error - please check the email format'
-        } else if (authError.message) {
-          errorMessage = `Account creation error: ${authError.message}`
-        }
-        
-        toast.error(errorMessage)
-        return
-      }
-
-      console.log('Auth user created:', authData.user)
-
-      // Insert student into database with the auth user ID
+      // Insert student into database with password stored (no auth account yet)
       const { data, error } = await supabase
         .from('students')
         .insert({
-          id: authData.user.id, // Use the auth user ID
+          id: studentId,
           name: `${newStudent.firstName} ${newStudent.lastName}`,
           email: email,
           kumon_dollars: 0,
-          grade: newStudent.grade
+          grade: newStudent.grade,
+          student_id: newStudent.studentId,
+          password: newStudent.password, // Store password for later auth creation
+          signup_completed: false, // Auth account not created yet
+          auth_user_id: null // Will be set when auth account is created
         })
         .select()
         .single()
@@ -654,18 +627,15 @@ export default function AdminDashboard() {
       if (error) {
         console.error('Error inserting student:', error)
         
-        // If student creation fails, we should clean up the auth user
-        await supabase.auth.admin.deleteUser(authData.user.id)
-        
         let errorMessage = 'Failed to add student to database'
         if (error.code === '42501') {
-          errorMessage = 'Permission denied - please check your admin access. Run the fix_user_id_invalid_error.sql script in Supabase.'
+          errorMessage = 'Permission denied - please run the fix_user_not_allowed_error.sql script in Supabase.'
         } else if (error.code === '23505') {
           errorMessage = 'A student with this email already exists'
         } else if (error.message.includes('user id invalid') || error.message.includes('invalid user')) {
-          errorMessage = 'User ID validation failed - please run the fix_user_id_invalid_error.sql script in Supabase SQL Editor'
+          errorMessage = 'User ID validation failed - please run the fix_user_not_allowed_error.sql script in Supabase SQL Editor'
         } else if (error.message.includes('policy') || error.message.includes('RLS')) {
-          errorMessage = 'Row Level Security policy error - please run the fix_user_id_invalid_error.sql script in Supabase'
+          errorMessage = 'Row Level Security policy error - please run the fix_user_not_allowed_error.sql script in Supabase'
         } else if (error.message) {
           errorMessage = `Database error: ${error.message}`
         }
@@ -680,7 +650,7 @@ export default function AdminDashboard() {
       await fetchStudents()
       
       // Show success message
-      toast.success('Student created successfully! They can now sign in with their email and password.')
+      toast.success('Student added successfully! Authentication account will be created later when the auth system is fixed.')
       
       // Reset form
       setShowAddStudent(false)
