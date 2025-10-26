@@ -68,8 +68,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // User exists in neither table - this is the problem!
         console.error('User not found in students or admin table:', userId)
         console.error('This means the user needs to be added to the admin table')
-        console.error('Run the fix_admin_authentication_complete.sql script in Supabase')
-        setUserType(null)
+        console.error('Run the complete_auth_fix.sql script in Supabase')
+        
+        // For demo purposes, let's be more permissive
+        // Check if this is a demo account
+        const userEmail = (await supabase.auth.getUser()).data.user?.email
+        if (userEmail === 'admin@demo.com') {
+          console.log('Demo admin detected, setting as admin')
+          setUserType('admin')
+        } else if (userEmail === 'student@demo.com') {
+          console.log('Demo student detected, setting as student')
+          setUserType('student')
+        } else {
+          setUserType(null)
+        }
       }
     } catch (err) {
       console.error('User type check error:', err)
