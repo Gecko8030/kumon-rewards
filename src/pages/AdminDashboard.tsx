@@ -622,6 +622,12 @@ export default function AdminDashboard() {
         let errorMessage = 'Failed to create user account'
         if (authError.message.includes('already registered')) {
           errorMessage = 'A user with this email already exists'
+        } else if (authError.message.includes('User not allowed')) {
+          errorMessage = 'User not allowed - please run the fix_user_not_allowed_error.sql script in Supabase SQL Editor'
+        } else if (authError.message.includes('signup disabled')) {
+          errorMessage = 'Signup is disabled - please enable user signup in Supabase Authentication settings'
+        } else if (authError.message.includes('email')) {
+          errorMessage = 'Email validation error - please check the email format'
         } else if (authError.message) {
           errorMessage = `Account creation error: ${authError.message}`
         }
