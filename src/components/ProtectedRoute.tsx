@@ -34,6 +34,14 @@ export default function ProtectedRoute({ children, requiredUserType }: Protected
     }
   }, [user, userType, loading])
 
+  // Handle authentication errors more specifically
+  useEffect(() => {
+    if (!loading && user && userType === null) {
+      console.log('User authenticated but no user type determined')
+      setError('Authentication Required - Your session has expired or you don\'t have proper access. Please run the fix_admin_authentication_complete.sql script in Supabase.')
+    }
+  }, [user, userType, loading])
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">

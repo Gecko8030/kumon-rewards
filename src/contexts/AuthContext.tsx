@@ -54,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (student) {
         // Check if student has completed signup
         if (student.signup_completed || student.auth_user_id === userId) {
+          console.log('User authenticated as student:', userId)
           setUserType('student')
         } else {
           // Student record exists but signup not completed
@@ -61,10 +62,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserType(null)
         }
       } else if (admin) {
+        console.log('User authenticated as admin:', userId)
         setUserType('admin')
       } else {
-        // User exists in neither table - this shouldn't happen in normal flow
-        console.warn('User not found in students or admin table:', userId)
+        // User exists in neither table - this is the problem!
+        console.error('User not found in students or admin table:', userId)
+        console.error('This means the user needs to be added to the admin table')
+        console.error('Run the fix_admin_authentication_complete.sql script in Supabase')
         setUserType(null)
       }
     } catch (err) {
